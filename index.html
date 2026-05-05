@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playable — Intonation Practice</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>Playable</h1>
+    <div class="toolbar-group">
+      <button id="load-btn">Load Score</button>
+      <input type="file" id="file-input" accept=".musicxml,.xml,.mxl,.mid,.midi">
+      <select id="part-select" disabled>
+        <option>Part</option>
+      </select>
+      <select id="mode-select">
+        <option value="simultaneous">Simultaneous</option>
+        <option value="ping">Ping</option>
+        <option value="drone">Drone</option>
+      </select>
+      <select id="scroll-mode-select" title="Scroll mode">
+        <option value="jump">Scroll: Jump</option>
+        <option value="continuous" selected>Scroll: Continuous</option>
+      </select>
+      <button id="collapse-btn" title="Focus view (F)">&#x26F6;</button>
+    </div>
+  </header>
+
+  <nav id="view-tabs">
+    <button class="view-tab" data-view="score">Score</button>
+    <button class="view-tab active" data-view="scales">Scales</button>
+  </nav>
+
+  <div id="scale-container" style="display:none">
+    <div class="scale-controls">
+      <select id="scale-key-select"></select>
+      <select id="scale-type-select">
+        <optgroup label="Scales">
+          <option value="scale-Major">Major</option>
+          <option value="scale-Natural Minor">Natural Minor</option>
+          <option value="scale-Melodic Minor">Melodic Minor</option>
+          <option value="scale-Harmonic Minor">Harmonic Minor</option>
+        </optgroup>
+        <optgroup label="Arpeggios">
+          <option value="arp-Major">Major</option>
+          <option value="arp-Minor">Minor</option>
+          <option value="arp-Dominant 7th">Dominant Seventh</option>
+          <option value="arp-Diminished 7th">Diminished Seventh</option>
+          <option value="arp-Augmented">Augmented</option>
+          <option value="arp-&#x266d;VI6">Flat Submediant Six</option>
+          <option value="arp-vi6">Relative Minor Six</option>
+          <option value="arp-IV6/4">Subdominant Six-Four</option>
+          <option value="arp-iv6/4">Minor Subdominant Six-Four</option>
+          <option value="arp-4-3 Suspension">Four-Three Suspension</option>
+        </optgroup>
+      </select>
+      <div class="submode-toggle">
+        <button id="submode-play-along" class="active">Play Along</button>
+        <button id="submode-detect">Detect</button>
+      </div>
+    </div>
+    <div id="scale-note-display"></div>
+  </div>
+
+  <div id="score-container">
+    <p>Load a MusicXML or MIDI file to see the score, or just start for free play.</p>
+  </div>
+  <div id="midi-note-list"></div>
+
+  <div class="pitch-hud">
+    <div class="note-display">
+      <div class="note-box detected">
+        <label>Detected</label>
+        <div class="note-name" id="detected-note">-</div>
+        <div class="note-freq" id="detected-freq"></div>
+      </div>
+      <div class="note-box target">
+        <label>Target</label>
+        <div class="note-name" id="target-note">-</div>
+      </div>
+    </div>
+
+    <div class="cents-meter" id="cents-meter">
+      <div class="cents-track">
+        <div class="cents-center"></div>
+        <div class="cents-indicator" id="cents-indicator"></div>
+      </div>
+    </div>
+    <div class="cents-labels">
+      <span>-50¢</span>
+      <span>0</span>
+      <span>+50¢</span>
+    </div>
+    <div class="cents-value" id="cents-value"></div>
+
+    <div class="confidence">
+      <span>Confidence</span>
+      <div class="confidence-track">
+        <div class="confidence-bar" id="confidence-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="navigation">
+    <button id="prev-measure" title="Previous measure">⏮ Measure</button>
+    <button id="prev-note" title="Previous note">◀ Note</button>
+    <span class="measure-info" id="measure-info">Load a score to begin</span>
+    <button id="next-note" title="Next note">Note ▶</button>
+    <button id="next-measure" title="Next measure">Measure ⏭</button>
+  </div>
+
+  <div class="controls">
+    <button id="play-btn" disabled>&#9654; Play</button>
+    <label class="bpm-label">BPM <input type="number" id="bpm-input" value="120" min="20" max="400"></label>
+    <button id="start-btn">Start</button>
+  </div>
+
+  <div class="keyboard-hints">
+    <kbd>Space</kbd> Play/Stop &nbsp;
+    <kbd>←</kbd> Prev note &nbsp;
+    <kbd>→</kbd> Next note &nbsp;
+    <kbd>P</kbd> Play/Stop &nbsp;
+    <kbd>F</kbd> Focus
+  </div>
+
+  <div id="focus-bar">
+    <button id="expand-btn" title="Exit focus view">&#x2715;</button>
+    <button id="focus-play-btn" disabled>&#9654; Play</button>
+    <label class="bpm-label">BPM <input type="number" id="focus-bpm-input" value="120" min="20" max="400"></label>
+    <button id="focus-start-btn">Start</button>
+  </div>
+
+  <!-- CDN dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.9.7/build/opensheetmusicdisplay.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

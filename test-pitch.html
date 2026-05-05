@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pitch Detection Test</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #111; color: #eee; }
+    h2 { color: #aef; }
+    button { padding: 8px 16px; margin: 4px; cursor: pointer; background: #333; color: #eee; border: 1px solid #555; }
+    button:hover { background: #444; }
+    #log { margin-top: 16px; white-space: pre; font-size: 13px; line-height: 1.6; }
+    .flip  { color: #f88; }
+    .ok    { color: #8f8; }
+    .quiet { color: #888; }
+    #summary { margin-top: 16px; padding: 12px; background: #222; border: 1px solid #444; }
+  </style>
+</head>
+<body>
+<h2>Pitch Detection Test</h2>
+<button id="runBtn">Run on test-scale.m4a</button>
+<button id="fileBtn">Load custom file</button>
+<input type="file" id="fileInput" accept="audio/*" style="display:none">
+<label style="margin-left:16px">
+  Chunk size:
+  <select id="chunkSize">
+    <option value="2048">2048</option>
+    <option value="4096" selected>4096</option>
+    <option value="8192">8192</option>
+  </select>
+</label>
+<label style="margin-left:16px">
+  Hop (ms):
+  <select id="hopMs">
+    <option value="25">25ms</option>
+    <option value="50" selected>50ms</option>
+    <option value="100">100ms</option>
+  </select>
+</label>
+<div id="summary"></div>
+<div id="log"></div>
+
+<script type="module">
+import { noteNumberToName, nearestNoteNumber, noteNumberToFrequency, centsDifference } from './js/notemath.js';
+
+// Inline YIN (same as pitch.js) so we can call it directly on Float32Array chunks
+function yin(buffer, sampleRate, threshold = 0.15) {
+  const halfLen = Math.floor(buffer.length / 2);
+  const diff = new Float32Array(halfLen);
+  for (let tau = 0; tau < halfLen; tau++) {
+    let sum = 0;
+    for (let i = 0; i < halfLen; i++) {
+      const delta = buffer[i] - buffer[i + tau];
+      sum += delta * delta;
+    }
+    diff[tau] = sum;
+  }
+  const cmndf = new Float32Array(halfLen);
+  cmndf[0] = 1;
+  let runningSum = 0;
+  for (let tau = 1; tau < halfLen; tau++) {
+    runningSum += diff[tau];
+    cmndf[tau] = diff[tau] / (runningSum / tau);
+  }
+  let tauEstimate = -1;
+  for (let tau = 2; tau < halfLen; tau++) {
+    if (cmndf[tau] < threshold) {
+      while (tau + 1 < halfLen && cmndf[tau + 1] < cmndf[tau]) tau++;
+      tauEstimate = tau;
+      break;
+    }
+  }
+  if (tauEstimate === -1) return null;
+  let betterTau = tauEstimate;
+  if (tauEstimate > 0 && tauEstimate < halfLen - 1) {
+    const s0 = cmndf[tauEstimate - 1];
+    const s1 = cmndf[tauEstimate];
+    const s2 = cmndf[tauEstimate + 1];
+    const shift = (s2 - s0) / (2 * (2 * s1 - s2 - s0));
+    if (isFinite(shift)) betterTau = tauEstimate + shift;
+  }
+  const frequency = sampleRate / betterTau;
+  const confidence = 1 - cmndf[tauEstimate];
+  if (frequency < 50 || frequency > 4500) return null;
+  return { frequency, confidence };
+}
+
+function rms(buf) {
+  let s = 0;
+  for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+  return Math.sqrt(s / buf.length);
+}
+
+async function analyzeBuffer(audioBuffer) {
+  const sampleRate = audioBuffer.sampleRate;
+  const chunkSize = parseInt(document.getElementById('chunkSize').value);
+  const hopSamples = Math.round(parseInt(document.getElementById('hopMs').value) / 1000 * sampleRate);
+  const data = audioBuffer.getChannelData(0);
+
+  const log = document.getElementById('log');
+  const summary = document.getElementById('summary');
+  log.textContent = '';
+  summary.textContent = 'Analyzing…';
+
+  let prevNote = null;
+  let flipCount = 0;
+  let totalDetected = 0;
+  const lines = [];
+
+  for (let offset = 0; offset + chunkSize <= data.length; offset += hopSamples) {
+    const chunk = data.slice(offset, offset + chunkSize);
+    const level = rms(chunk);
+    const timeSec = (offset / sampleRate).toFixed(2);
+
+    if (level < 0.01) {
+      lines.push(`<span class="quiet">${timeSec}s  (quiet)</span>`);
+      prevNote = null;
+      continue;
+    }
+
+    const result = yin(chunk, sampleRate);
+    if (!result) {
+      lines.push(`<span class="quiet">${timeSec}s  no pitch  rms:${level.toFixed(3)}</span>`);
+      prevNote = null;
+      continue;
+    }
+
+    const { frequency, confidence } = result;
+    const midi = nearestNoteNumber(frequency);
+    const noteName = noteNumberToName(midi);
+    const nearestFreq = noteNumberToFrequency(midi);
+    const cents = centsDifference(frequency, nearestFreq);
+    const centsStr = (cents >= 0 ? '+' : '') + cents.toFixed(1) + '¢';
+
+    const isFlip = prevNote !== null && Math.abs(midi - prevNote) >= 11; // octave jump
+    if (isFlip) flipCount++;
+    totalDetected++;
+    prevNote = midi;
+
+    const cls = isFlip ? 'flip' : 'ok';
+    const flipMark = isFlip ? '  ← OCTAVE FLIP' : '';
+    lines.push(
+      `<span class="${cls}">${timeSec}s  ${noteName.padEnd(3)}  ${frequency.toFixed(1).padStart(7)}Hz  conf:${confidence.toFixed(2)}  ${centsStr.padStart(7)}${flipMark}</span>`
+    );
+  }
+
+  log.innerHTML = lines.join('\n');
+  summary.innerHTML = `<b>Total detected:</b> ${totalDetected} &nbsp; <b style="color:#f88">Octave flips:</b> ${flipCount} &nbsp; <b>Flip rate:</b> ${totalDetected ? (100 * flipCount / totalDetected).toFixed(1) : 0}%`;
+}
+
+async function runOnUrl(url) {
+  const ctx = new AudioContext();
+  const res = await fetch(url);
+  const arrayBuf = await res.arrayBuffer();
+  const audioBuf = await ctx.decodeAudioData(arrayBuf);
+  await analyzeBuffer(audioBuf);
+}
+
+async function runOnFile(file) {
+  const ctx = new AudioContext();
+  const arrayBuf = await file.arrayBuffer();
+  const audioBuf = await ctx.decodeAudioData(arrayBuf);
+  await analyzeBuffer(audioBuf);
+}
+
+document.getElementById('runBtn').addEventListener('click', () => runOnUrl('test-scale.m4a'));
+document.getElementById('fileBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) runOnFile(e.target.files[0]);
+});
+</script>
+</body>
+</html>

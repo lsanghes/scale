@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Playable — Scan Sheet Music</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .scan-wrap { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+    .scan-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+    .scan-toolbar input[type="url"] { flex: 1; min-width: 200px; padding: 0.3rem 0.5rem; }
+    .scan-status { padding: 0.5rem 0; min-height: 1.4em; color: #555; }
+    .scan-status.error { color: #c0392b; }
+    .scan-preview { max-width: 100%; max-height: 300px; display: block; margin-bottom: 0.75rem; border: 1px solid #ccc; }
+    #score-container { min-height: 300px; border: 1px solid #ddd; padding: 0.5rem; background: #fff; overflow: auto; max-height: 70vh; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Playable — Scan</h1>
+    <div class="toolbar-group">
+      <a href="index.html"><button type="button">← Main App</button></a>
+    </div>
+  </header>
+
+  <div class="scan-wrap">
+    <div class="scan-toolbar">
+      <label><strong>Engine:</strong>
+        <select id="engine-select">
+          <option value="audiveris">Audiveris (rule-based, best for clean scans)</option>
+          <option value="oemer">oemer (ML, end-to-end ONNX)</option>
+          <option value="clarity">Clarity-OMR (ML, PyTorch + HF)</option>
+        </select>
+      </label>
+      <label>URL:
+        <input type="url" id="server-url" value="http://localhost:8001" size="30">
+      </label>
+      <button id="health-btn" type="button">Check</button>
+    </div>
+
+    <div class="scan-toolbar">
+      <input type="file" id="image-input" accept="image/*,application/pdf" capture="environment">
+      <button id="scan-btn" type="button" disabled>Scan → MusicXML</button>
+      <label class="bpm-label">BPM
+        <input type="number" id="bpm-input" value="90" min="20" max="400">
+      </label>
+      <button id="play-btn" type="button" disabled>▶ Play</button>
+    </div>
+
+    <div id="status" class="scan-status">Pick an image of sheet music to begin.</div>
+
+    <img id="preview" class="scan-preview hidden" alt="preview">
+
+    <div id="score-container">
+      <p style="color:#888">Scanned score will appear here.</p>
+    </div>
+  </div>
+
+  <!-- CDN dependencies (same set as index.html) -->
+  <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.9.7/build/opensheetmusicdisplay.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
+  <script type="module" src="js/scan.js"></script>
+</body>
+</html>
