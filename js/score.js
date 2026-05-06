@@ -39,10 +39,15 @@ export class ScoreManager {
       drawTitle: true,
       drawPartNames: true,
     });
-    this.osmd.EngravingRules.MinimumDistanceBetweenSystems = 8;
     await this.osmd.load(xmlString);
     window._osmd = this.osmd;
+    const rules = this.osmd.EngravingRules;
+    rules.MinimumDistanceBetweenSystems = 8;
+    rules.ShowClefBeforeChange = false;
+    rules.RenderEndOfMeasureClefBeforeChange = false;
+    container.style.visibility = 'hidden';
     this.osmd.render();
+    container.style.visibility = '';
     this._extractFromOSMD();
     this._setupCursor();
   }
@@ -56,11 +61,16 @@ export class ScoreManager {
       drawTitle: true,
       drawPartNames: true,
     });
-    this.osmd.EngravingRules.MinimumDistanceBetweenSystems = 8;
     const buf = await file.arrayBuffer();
     await this.osmd.load(buf);
     window._osmd = this.osmd;
+    const rules = this.osmd.EngravingRules;
+    rules.MinimumDistanceBetweenSystems = 8;
+    rules.ShowClefBeforeChange = false;
+    rules.RenderEndOfMeasureClefBeforeChange = false;
+    container.style.visibility = 'hidden';
     this.osmd.render();
+    container.style.visibility = '';
     this._extractFromOSMD();
     this._setupCursor();
   }

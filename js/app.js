@@ -1173,13 +1173,15 @@ function shiftCursorForCurrentSystem(cursorEl) {
   }
 }
 
-function applyScalePostProcessing() {
+function applyScalePostProcessing(keepHidden = false) {
   if (_postProcessingPending) clearTimeout(_postProcessingPending);
+  if (keepHidden) els.scoreContainer.style.visibility = 'hidden';
   _postProcessingPending = setTimeout(() => {
     _postProcessingPending = null;
     hideCourtesyClefsAtLineEnds();
     equalizeSystemSpacing();
     _postProcessApplied = true;
+    els.scoreContainer.style.visibility = '';
   }, 80);
 }
 
@@ -1432,7 +1434,7 @@ async function renderScaleMusicXML(notes) {
     state.scoreManager.scoreType = 'musicxml';
     state.scoreManager._cursorBeat = -1;
     state.scoreManager._setupCursor();
-    applyScalePostProcessing();
+    applyScalePostProcessing(true);
     setupScalePostProcessingObserver();
 
     // Force OSMD to fully position the cursor at the first note.
