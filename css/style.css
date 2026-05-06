@@ -319,7 +319,7 @@ body.focused.scale-view #scale-container {
 
 /* Note name overlay (shown during playback) */
 .note-name-overlay {
-  position: absolute;
+  position: fixed;
   pointer-events: none;
   background: rgba(233, 69, 96, 0.95);
   color: #fff;

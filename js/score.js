@@ -39,7 +39,9 @@ export class ScoreManager {
       drawTitle: true,
       drawPartNames: true,
     });
+    this.osmd.EngravingRules.MinimumDistanceBetweenSystems = 8;
     await this.osmd.load(xmlString);
+    window._osmd = this.osmd;
     this.osmd.render();
     this._extractFromOSMD();
     this._setupCursor();
@@ -54,8 +56,10 @@ export class ScoreManager {
       drawTitle: true,
       drawPartNames: true,
     });
+    this.osmd.EngravingRules.MinimumDistanceBetweenSystems = 8;
     const buf = await file.arrayBuffer();
     await this.osmd.load(buf);
+    window._osmd = this.osmd;
     this.osmd.render();
     this._extractFromOSMD();
     this._setupCursor();

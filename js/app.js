@@ -105,8 +105,8 @@ function showNoteNameOverlay(note, cursorEl) {
 
   if (cursorRect) {
     // Position below the cursor with enough gap to not block the note
-    const left = cursorRect.left + cursorRect.width / 2 + window.scrollX;
-    const top = cursorRect.bottom + window.scrollY + 35;
+    const left = cursorRect.left + cursorRect.width / 2;
+    const top = cursorRect.bottom + 35;
     els.noteNameOverlay.style.left = `${left}px`;
     els.noteNameOverlay.style.top = `${top}px`;
     els.noteNameOverlay.style.display = 'block';
@@ -1405,13 +1405,13 @@ async function renderScaleMusicXML(notes) {
           if (typeof rules[key] !== 'undefined') rules[key] = val;
         };
         setIfDefined('MeasureNumberLabelOffset', 0);
-        // Tight system spacing
-        setIfDefined('MinSkyBottomDistBetweenSystems', 2);
-        setIfDefined('MinimumDistanceBetweenSystems', 4);
-        setIfDefined('SystemDistance', 4);
-        setIfDefined('BetweenStaffDistance', 2);
-        setIfDefined('StaffDistance', 5);
-        setIfDefined('MinSkyBottomDistBetweenStaves', 1);
+        // System spacing
+        setIfDefined('MinSkyBottomDistBetweenSystems', 5);
+        setIfDefined('MinimumDistanceBetweenSystems', 8);
+        setIfDefined('SystemDistance', 8);
+        setIfDefined('BetweenStaffDistance', 4);
+        setIfDefined('StaffDistance', 8);
+        setIfDefined('MinSkyBottomDistBetweenStaves', 3);
         // Reduce title-to-staff distance
         setIfDefined('TitleTopDistance', 2);
         setIfDefined('TitleBottomDistance', 1);
@@ -1492,6 +1492,18 @@ function showScaleComplete() {
 // Event listeners
 function init() {
   initDOM();
+
+  window.addEventListener('scroll', () => {
+    const osmdCursor = state.scoreManager.osmd?.cursor;
+    const cursorEl = osmdCursor?.cursorElement || osmdCursor?.GetCurrentSymbol?.()?.cursorElement;
+    if (cursorEl && els.noteNameOverlay.style.display !== 'none') {
+      const cursorRect = cursorEl.getBoundingClientRect();
+      if (cursorRect.width || cursorRect.height) {
+        els.noteNameOverlay.style.left = `${cursorRect.left + cursorRect.width / 2}px`;
+        els.noteNameOverlay.style.top = `${cursorRect.bottom + 35}px`;
+      }
+    }
+  });
 
   els.loadBtn.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', handleFileLoad);
