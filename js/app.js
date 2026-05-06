@@ -79,11 +79,45 @@ function initDOM() {
   // Scale mode elements
   els.viewTabs = document.querySelectorAll('.view-tab');
   els.scaleContainer = document.getElementById('scale-container');
-  els.scaleKeySelect = document.getElementById('scale-key-select');
-  els.scaleTypeSelect = document.getElementById('scale-type-select');
-  els.scaleNoteDisplay = document.getElementById('scale-note-display');
+  els.scaleKeyButtons = document.getElementById('scale-key-buttons');
+  els.scaleTypeButtons = document.getElementById('scale-type-buttons');
   els.submodePlayAlong = document.getElementById('submode-play-along');
   els.submodeDetect = document.getElementById('submode-detect');
+  els.noteNameOverlay = document.getElementById('note-name-overlay');
+}
+
+function showNoteNameOverlay(note, cursorEl) {
+  if (!els.noteNameOverlay || !note) return;
+
+  // Try to find the cursor element if not provided
+  if (!cursorEl) {
+    const osmdCursor = state.scoreManager.osmd?.cursor;
+    cursorEl = osmdCursor?.cursorElement || osmdCursor?.GetCurrentSymbol?.()?.cursorElement;
+  }
+
+  let cursorRect = null;
+  if (cursorEl && cursorEl.getBoundingClientRect) {
+    cursorRect = cursorEl.getBoundingClientRect();
+    if (!cursorRect.height && !cursorRect.width) cursorRect = null;
+  }
+
+  els.noteNameOverlay.textContent = note.name;
+
+  if (cursorRect) {
+    // Position below the cursor with enough gap to not block the note
+    const left = cursorRect.left + cursorRect.width / 2 + window.scrollX;
+    const top = cursorRect.bottom + window.scrollY + 35;
+    els.noteNameOverlay.style.left = `${left}px`;
+    els.noteNameOverlay.style.top = `${top}px`;
+    els.noteNameOverlay.style.display = 'block';
+  } else {
+    // Cursor not ready yet — don't show until we have a valid position
+    els.noteNameOverlay.style.display = 'none';
+  }
+}
+
+function hideNoteNameOverlay() {
+  if (els.noteNameOverlay) els.noteNameOverlay.style.display = 'none';
 }
 
 // Sync both play buttons and both BPM inputs to the same state
@@ -521,12 +555,21 @@ async function startPlayback() {
     setPlayBtnState(false, true);
 
     if (state.view === 'scales') {
-      // Scale mode: simple note highlighting
+      // Scale mode: simple note highlighting with looping
+      state.scorePlayer.shouldLoop = true;
+      state.scorePlayer.loopDelayMs = 3000; // 3 seconds
       state.scorePlayer.onNoteIndex = (idx) => {
-        if (idx !== state.currentNoteIndex) {
+        const changed = idx !== state.currentNoteIndex;
+        if (changed) {
           state.currentNoteIndex = idx;
           updateTargetDisplay();
           updateScaleHighlight();
+        }
+        // Always sync cursor and show overlay during playback (covers initial note too)
+        if (state.scoreManager.osmd) {
+          const cursorEl = state.scoreManager.syncCursor(idx);
+          shiftCursorForCurrentSystem(cursorEl);
+          showNoteNameOverlay(state.activeNotes[idx], cursorEl);
         }
       };
       state.scorePlayer.onProgress = null;
@@ -611,8 +654,11 @@ async function startPlayback() {
 }
 
 function stopPlayback() {
-  if (state.scorePlayer) state.scorePlayer.stop();
-  if (state.scorePlayer) state.scorePlayer.onProgress = null;
+  if (state.scorePlayer) {
+    state.scorePlayer.shouldLoop = false;
+    state.scorePlayer.stop();
+    state.scorePlayer.onProgress = null;
+  }
   state.isPlaying = false;
   state._playbackScrollEnabled = true;
   state._lastPlaybackMeasure = null;
@@ -783,17 +829,263 @@ function switchView(view) {
   } else {
     els.scaleContainer.style.display = 'none';
     enablePlayBtns(state.scoreLoaded);
+    if (!state.scoreLoaded) loadSampleScore();
   }
 }
 
-function populateScaleKeySelect() {
-  els.scaleKeySelect.innerHTML = '';
+function populateScaleKeyButtons() {
+  els.scaleKeyButtons.innerHTML = '';
+
+  // Keys header
+  const keysHeader = document.createElement('span');
+  keysHeader.className = 'scale-type-header';
+  keysHeader.textContent = 'Keys:';
+  els.scaleKeyButtons.appendChild(keysHeader);
+
   NOTE_NAMES.forEach((name, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = name;
-    els.scaleKeySelect.appendChild(opt);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = name;
+    btn.dataset.key = i;
+    btn.classList.toggle('active', state.scaleKey === i);
+    btn.addEventListener('click', () => {
+      state.scaleKey = i;
+      if (state.isPlaying) stopPlayback();
+      updateScaleNotes();
+      updateScaleKeyButtonStates();
+    });
+    els.scaleKeyButtons.appendChild(btn);
   });
+}
+
+function updateScaleKeyButtonStates() {
+  els.scaleKeyButtons.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.key) === state.scaleKey);
+  });
+}
+
+function populateScaleTypeButtons() {
+  els.scaleTypeButtons.innerHTML = '';
+
+  // Scales header
+  const scalesHeader = document.createElement('span');
+  scalesHeader.className = 'scale-type-header';
+  scalesHeader.textContent = 'Scales:';
+  els.scaleTypeButtons.appendChild(scalesHeader);
+
+  const scaleItems = [
+    { label: 'Major', type: 'Major', isArp: false },
+    { label: 'Natural Minor', type: 'Natural Minor', isArp: false },
+    { label: 'Melodic Minor', type: 'Melodic Minor', isArp: false },
+    { label: 'Harmonic Minor', type: 'Harmonic Minor', isArp: false },
+  ];
+
+  scaleItems.forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = item.label;
+    btn.dataset.type = item.type;
+    btn.dataset.isArp = item.isArp;
+    btn.classList.toggle('active', state.scaleType === item.type && !state.scaleIsArpeggio);
+    btn.addEventListener('click', () => {
+      state.scaleType = item.type;
+      state.scaleIsArpeggio = item.isArp;
+      if (state.isPlaying) stopPlayback();
+      updateScaleNotes();
+      updateScaleTypeButtonStates();
+    });
+    els.scaleTypeButtons.appendChild(btn);
+  });
+
+  // Arpeggios header
+  const arpHeader = document.createElement('span');
+  arpHeader.className = 'scale-type-header';
+  arpHeader.textContent = 'Arpeggios:';
+  els.scaleTypeButtons.appendChild(arpHeader);
+
+  const arpItems = [
+    { label: 'Major', type: 'Major', isArp: true },
+    { label: 'Minor', type: 'Minor', isArp: true },
+    { label: 'Dom 7th', type: 'Dominant 7th', isArp: true },
+    { label: 'Dim 7th', type: 'Diminished 7th', isArp: true },
+    { label: 'Aug', type: 'Augmented', isArp: true },
+    { label: 'bVI6', type: '♭VI6', isArp: true },
+    { label: 'vi6', type: 'vi6', isArp: true },
+    { label: 'IV6/4', type: 'IV6/4', isArp: true },
+    { label: 'iv6/4', type: 'iv6/4', isArp: true },
+    { label: '4-3 Sus', type: '4-3 Suspension', isArp: true },
+  ];
+
+  arpItems.forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = item.label;
+    btn.dataset.type = item.type;
+    btn.dataset.isArp = item.isArp;
+    btn.classList.toggle('active', state.scaleType === item.type && state.scaleIsArpeggio);
+    btn.addEventListener('click', () => {
+      state.scaleType = item.type;
+      state.scaleIsArpeggio = item.isArp;
+      if (state.isPlaying) stopPlayback();
+      updateScaleNotes();
+      updateScaleTypeButtonStates();
+    });
+    els.scaleTypeButtons.appendChild(btn);
+  });
+}
+
+function updateScaleTypeButtonStates() {
+  els.scaleTypeButtons.querySelectorAll('button').forEach(btn => {
+    const isActive = state.scaleType === btn.dataset.type &&
+                     state.scaleIsArpeggio === (btn.dataset.isArp === 'true');
+    btn.classList.toggle('active', isActive);
+  });
+}
+
+function getScaleTitle() {
+  const keyName = NOTE_NAMES[state.scaleKey];
+  const typeLabel = state.scaleType;
+  const kindLabel = state.scaleIsArpeggio ? 'Arpeggio' : 'Scale';
+  return `${keyName} ${typeLabel} ${kindLabel} - 3 Octaves`;
+}
+
+function generateScaleMusicXML(notes) {
+  const title = getScaleTitle();
+  // Clef ranges (within the 5 staff lines, no ledger lines)
+  const CLEFS = {
+    bass:   { sign: 'F', line: 4, low: 43, high: 57 },  // G2 to A3
+    tenor:  { sign: 'C', line: 4, low: 50, high: 64 },  // D3 to E4
+    treble: { sign: 'G', line: 2, low: 64, high: 77 },  // E4 to F5
+  };
+
+  function pickBestClefForMeasure(measureNotes) {
+    let bestClef = null;
+    let bestScore = -Infinity;
+    for (const clef of Object.values(CLEFS)) {
+      // Score: count notes within range, tiebreak by minimizing total distance from range center
+      const center = (clef.low + clef.high) / 2;
+      let inRange = 0;
+      let totalDistance = 0;
+      for (const note of measureNotes) {
+        if (note.midi >= clef.low && note.midi <= clef.high) inRange++;
+        totalDistance += Math.abs(note.midi - center);
+      }
+      // Use inRange as primary score, totalDistance as tiebreak (negated, smaller is better)
+      const score = inRange * 1000 - totalDistance;
+      if (score > bestScore) {
+        bestScore = score;
+        bestClef = clef;
+      }
+    }
+    return bestClef;
+  }
+
+  function generateNoteXml(note) {
+    const octaveOffset = Math.floor(note.midi / 12) - 1;
+    const noteInOctave = note.midi % 12;
+    const noteLetters = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'];
+    const alterations = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0];
+    const noteLetter = noteLetters[noteInOctave];
+    const alteration = alterations[noteInOctave];
+
+    let alterXml = '';
+    if (alteration === 1) alterXml = '<alter>1</alter>';
+    else if (alteration === -1) alterXml = '<alter>-1</alter>';
+
+    return `<note>
+      <pitch>
+        <step>${noteLetter}</step>
+        ${alterXml}
+        <octave>${octaveOffset}</octave>
+      </pitch>
+      <duration>4</duration>
+      <type>quarter</type>
+    </note>`;
+  }
+
+  // Chunk notes into measures of 6, then pick best clef for each
+  const NOTES_PER_MEASURE = 6;
+  const measures = []; // [{ clef, notes }]
+  for (let i = 0; i < notes.length; i += NOTES_PER_MEASURE) {
+    const chunk = notes.slice(i, i + NOTES_PER_MEASURE);
+    measures.push({
+      clef: pickBestClefForMeasure(chunk),
+      notes: chunk,
+    });
+  }
+
+  // Build measures
+  let measuresXml = '';
+  let prevClefSign = null;
+
+  measures.forEach((measure, idx) => {
+    const measureNum = idx + 1;
+    const beats = measure.notes.length;
+    const noteXmls = measure.notes.map(generateNoteXml).join('\n      ');
+    const clefChanged = prevClefSign !== measure.clef.sign;
+    const isFirst = idx === 0;
+
+    let attributesXml = '';
+    if (isFirst) {
+      attributesXml = `<attributes>
+        <divisions>4</divisions>
+        <time print-object="no">
+          <beats>${beats}</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>${measure.clef.sign}</sign>
+          <line>${measure.clef.line}</line>
+        </clef>
+      </attributes>`;
+    } else {
+      const parts = [];
+      parts.push(`<time print-object="no">
+          <beats>${beats}</beats>
+          <beat-type>4</beat-type>
+        </time>`);
+      if (clefChanged) {
+        parts.push(`<clef>
+          <sign>${measure.clef.sign}</sign>
+          <line>${measure.clef.line}</line>
+        </clef>`);
+      }
+      attributesXml = `<attributes>
+        ${parts.join('\n        ')}
+      </attributes>`;
+    }
+
+    measuresXml += `<measure number="${measureNum}">
+      ${attributesXml}
+      ${noteXmls}
+    </measure>\n    `;
+
+    prevClefSign = measure.clef.sign;
+  });
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <work>
+    <work-title>${title}</work-title>
+  </work>
+  <part-list>
+    <score-part id="P1">
+      <part-name>Cello</part-name>
+      <score-instrument id="P1-I1">
+        <instr-name>Cello</instr-name>
+      </score-instrument>
+      <midi-instrument id="P1-I1">
+        <midi-program>42</midi-program>
+      </midi-instrument>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    ${measuresXml}
+  </part>
+</score-partwise>`;
+
+  return xml;
 }
 
 function updateScaleNotes() {
@@ -802,51 +1094,381 @@ function updateScaleNotes() {
   state.currentNoteIndex = 0;
   state.currentMeasure = 1;
   state.inTuneSince = 0;
-  renderScaleNoteDisplay();
+  renderScaleMusicXML(notes);
   updateTargetDisplay();
 }
 
-function renderScaleNoteDisplay() {
-  const container = els.scaleNoteDisplay;
-  container.innerHTML = '';
+// Track post-processing state so we can re-apply after OSMD re-renders (e.g. on resize)
+let _postProcessingPending = null;
+let _scaleSvgObserver = null;
+let _postProcessApplied = false;
+// Map of original staff Y range → shift applied. Used to shift the cursor too.
+let _systemShiftMap = null;
 
-  const notes = state.activeNotes;
-  if (!notes.length) return;
+function shiftCursorForCurrentSystem(cursorEl) {
+  // After OSMD positions the cursor (using original/unshifted coordinates),
+  // apply the same shift to the cursor that we applied to the staff it's on.
+  if (!cursorEl || !_systemShiftMap || !_systemShiftMap.length) return;
 
-  let currentRow = notes[0].row;
-  let rowDiv = document.createElement('div');
-  rowDiv.className = 'scale-row';
-  container.appendChild(rowDiv);
+  // OSMD's cursor is typically an HTML <img> overlay positioned with style.top/left.
+  // To find which system the cursor belongs to, we need to know the cursor's Y in
+  // the same coordinate system as the staff Y values from the SVG.
 
-  for (let i = 0; i < notes.length; i++) {
-    if (notes[i].row !== currentRow) {
-      currentRow = notes[i].row;
-      rowDiv = document.createElement('div');
-      rowDiv.className = 'scale-row';
-      container.appendChild(rowDiv);
+  const isHTMLCursor = !(cursorEl instanceof SVGElement);
+
+  let cy;
+  if (isHTMLCursor) {
+    // The HTML cursor's "top" is in pixels relative to the score container.
+    // Convert it to SVG coordinates by aligning with the SVG's viewport.
+    const svg = els.scoreContainer.querySelector('svg');
+    if (!svg) return;
+    const svgRect = svg.getBoundingClientRect();
+    const cursorRect = cursorEl.getBoundingClientRect();
+    const screenY = cursorRect.top + cursorRect.height / 2;
+    // Map screen Y → SVG Y using viewBox if defined, else assume 1:1
+    const viewBox = svg.viewBox?.baseVal;
+    if (viewBox && viewBox.height && svgRect.height) {
+      cy = (screenY - svgRect.top) * (viewBox.height / svgRect.height);
+    } else {
+      cy = screenY - svgRect.top;
+    }
+  } else {
+    let bbox;
+    try { bbox = cursorEl.getBBox(); } catch (_) { return; }
+    cy = bbox.y + bbox.height / 2;
+  }
+
+  // Find the nearest staff in the (original) shift map
+  let nearest = _systemShiftMap[0];
+  let minDist = Math.abs(cy - nearest.center);
+  for (let i = 1; i < _systemShiftMap.length; i++) {
+    const d = Math.abs(cy - _systemShiftMap[i].center);
+    if (d < minDist) {
+      minDist = d;
+      nearest = _systemShiftMap[i];
+    }
+  }
+
+  if (isHTMLCursor) {
+    // Apply shift via CSS transform
+    if (nearest.shift !== 0) {
+      // Convert SVG-units shift to screen-pixel shift via the same ratio used above
+      const svg = els.scoreContainer.querySelector('svg');
+      const svgRect = svg?.getBoundingClientRect();
+      const viewBox = svg?.viewBox?.baseVal;
+      let pxShift = nearest.shift;
+      if (viewBox && viewBox.height && svgRect && svgRect.height) {
+        pxShift = nearest.shift * (svgRect.height / viewBox.height);
+      }
+      cursorEl.style.transform = `translateY(${pxShift}px)`;
+    } else {
+      cursorEl.style.transform = '';
+    }
+  } else {
+    if (nearest.shift !== 0) {
+      cursorEl.setAttribute('transform', `translate(0, ${nearest.shift})`);
+    } else {
+      cursorEl.removeAttribute('transform');
+    }
+  }
+}
+
+function applyScalePostProcessing() {
+  if (_postProcessingPending) clearTimeout(_postProcessingPending);
+  _postProcessingPending = setTimeout(() => {
+    _postProcessingPending = null;
+    hideCourtesyClefsAtLineEnds();
+    equalizeSystemSpacing();
+    _postProcessApplied = true;
+  }, 80);
+}
+
+function setupScalePostProcessingObserver() {
+  // Observe the score container and re-apply our post-processing whenever
+  // OSMD re-renders the SVG (e.g. on window resize).
+  if (_scaleSvgObserver) _scaleSvgObserver.disconnect();
+  if (!els.scoreContainer) return;
+  _scaleSvgObserver = new MutationObserver(() => {
+    if (state.view !== 'scales') return;
+    // Detect a fresh render (SVG was replaced or changed significantly)
+    _postProcessApplied = false;
+    applyScalePostProcessing();
+  });
+  _scaleSvgObserver.observe(els.scoreContainer, {
+    childList: true,
+    subtree: false,
+  });
+}
+
+function hideCourtesyClefsAtLineEnds() {
+  // Find clef-like SVG elements at the right edge of each system and hide them.
+  try {
+    const svg = els.scoreContainer.querySelector('svg');
+    if (!svg) return;
+
+    // Detect staff lines by geometry: wide and very thin
+    const allDrawn = svg.querySelectorAll('line, path, rect');
+    const horizontalLines = [];
+    allDrawn.forEach(el => {
+      let bbox;
+      try { bbox = el.getBBox(); } catch (_) { return; }
+      if (bbox.width > 50 && bbox.height < 3) {
+        horizontalLines.push(el);
+      }
+    });
+    if (!horizontalLines.length) return;
+
+    const lineData = horizontalLines.map(el => {
+      const bbox = el.getBBox();
+      return {
+        el,
+        y: bbox.y + bbox.height / 2,
+        x1: bbox.x,
+        x2: bbox.x + bbox.width,
+      };
+    }).sort((a, b) => a.y - b.y);
+
+    // Cluster by Y to find staves
+    const clusters = [];
+    let current = null;
+    for (const item of lineData) {
+      if (!current || item.y - current.items[current.items.length - 1].y > 25) {
+        current = { items: [item], minY: item.y, maxY: item.y };
+        clusters.push(current);
+      } else {
+        current.items.push(item);
+        current.maxY = item.y;
+      }
     }
 
-    const pill = document.createElement('span');
-    pill.className = 'scale-note-pill';
-    pill.innerHTML = `<span class="pill-solfege">${notes[i].solfege}</span><span class="pill-note">(${notes[i].name})</span>`;
-    pill.dataset.idx = i;
-    if (i === state.currentNoteIndex) pill.classList.add('active-note');
-    rowDiv.appendChild(pill);
+    const staves = clusters.filter(c => c.items.length >= 5);
+    if (!staves.length) return;
+
+    // For each staff, find the X range and Y range
+    const staffInfo = staves.map(staff => {
+      const xMin = Math.min(...staff.items.map(it => it.x1));
+      const xMax = Math.max(...staff.items.map(it => it.x2));
+      return { minY: staff.minY, maxY: staff.maxY, xMin, xMax };
+    });
+
+    // Find and hide clef glyphs at the right edge of each staff
+    const allCandidates = svg.querySelectorAll('path, g[id*="clef"], g[class*="clef"]');
+    allCandidates.forEach(p => {
+      let bbox;
+      try { bbox = p.getBBox(); } catch (_) { return; }
+      if (bbox.width === 0 && bbox.height === 0) return;
+      const cx = bbox.x + bbox.width / 2;
+      const cy = bbox.y + bbox.height / 2;
+
+      for (const info of staffInfo) {
+        const staffHeight = info.maxY - info.minY;
+        const yMargin = staffHeight * 2;
+        if (cy < info.minY - yMargin || cy > info.maxY + yMargin) continue;
+        if (cx < info.xMax - 60 || cx > info.xMax + 25) continue;
+        if (bbox.height < staffHeight * 0.4) continue;
+        // Clefs are WIDE glyphs; stems are very narrow vertical lines
+        if (bbox.width < 8) continue;
+        p.style.display = 'none';
+        break;
+      }
+    });
+  } catch (e) {
+    console.warn('hideCourtesyClefsAtLineEnds failed:', e);
+  }
+}
+
+function equalizeSystemSpacing() {
+  try {
+    const svg = els.scoreContainer.querySelector('svg');
+    if (!svg) return;
+
+    // Strategy: find the deepest <g> elements that each contain a single staff
+    // (5 horizontal lines clustered tightly in Y). Their nearest common parent
+    // levels up should be the page group. We treat each staff-containing group
+    // as a system, then shift them to equalize gaps.
+
+    // Find staff lines by geometry: wide and very thin
+    const allDrawn = svg.querySelectorAll('line, path, rect');
+    const horizontalLines = [];
+    allDrawn.forEach(el => {
+      let bbox;
+      try { bbox = el.getBBox(); } catch (_) { return; }
+      if (bbox.width > 50 && bbox.height < 3) {
+        horizontalLines.push(el);
+      }
+    });
+    if (!horizontalLines.length) return;
+
+    // Cluster horizontal lines by Y proximity into staves
+    const lineData = horizontalLines.map(el => {
+      const bbox = el.getBBox();
+      return { el, y: bbox.y + bbox.height / 2 };
+    }).sort((a, b) => a.y - b.y);
+
+    const clusters = [];
+    let current = null;
+    for (const item of lineData) {
+      if (!current || item.y - current.items[current.items.length - 1].y > 25) {
+        current = { items: [item], minY: item.y, maxY: item.y };
+        clusters.push(current);
+      } else {
+        current.items.push(item);
+        current.maxY = item.y;
+      }
+    }
+
+    const staves = clusters.filter(c => c.items.length >= 5);
+    if (staves.length < 3) return;
+
+    // For each system, store its staff center Y for "nearest staff" matching
+    const staffCenters = staves.map(s => (s.minY + s.maxY) / 2);
+
+    // Calculate current gaps between staves and target gap
+    const gaps = [];
+    for (let i = 0; i < staves.length - 1; i++) {
+      gaps.push(staves[i + 1].minY - staves[i].maxY);
+    }
+    const targetGap = Math.min(...gaps);
+
+    // Calculate cumulative shifts for each system
+    const systemShifts = [0];
+    for (let i = 1; i < staves.length; i++) {
+      const desiredMinY = staves[i - 1].maxY + targetGap;
+      const currentMinY = staves[i].minY;
+      systemShifts.push(systemShifts[i - 1] + (desiredMinY - currentMinY));
+    }
+
+    // Apply shifts to every SVG element. Assign each element to its NEAREST
+    // staff (by distance from center) so tall elements like stems stay with
+    // their noteheads.
+    const allElements = svg.querySelectorAll('line, path, rect, text, ellipse, circle, polygon, polyline, image, use');
+    allElements.forEach(el => {
+      let svgBbox;
+      try { svgBbox = el.getBBox(); } catch (_) { return; }
+      const cy = svgBbox.y + svgBbox.height / 2;
+      let nearestIdx = 0;
+      let nearestDist = Math.abs(cy - staffCenters[0]);
+      for (let i = 1; i < staffCenters.length; i++) {
+        const d = Math.abs(cy - staffCenters[i]);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestIdx = i;
+        }
+      }
+      if (systemShifts[nearestIdx] !== 0) {
+        const existing = el.getAttribute('transform') || '';
+        el.setAttribute('transform', `${existing} translate(0, ${systemShifts[nearestIdx]})`.trim());
+      }
+    });
+
+    // Save the shift map so we can shift the cursor too.
+    _systemShiftMap = staves.map((s, i) => ({
+      center: staffCenters[i],
+      shift: systemShifts[i],
+    }));
+  } catch (e) {
+    console.warn('equalizeSystemSpacing failed:', e);
+  }
+}
+
+async function renderScaleMusicXML(notes) {
+  if (!notes.length) return;
+  const xmlString = generateScaleMusicXML(notes);
+  const container = els.scoreContainer;
+
+  try {
+    const osmdOptions = {
+      autoResize: true,
+      drawTitle: true,
+      drawSubtitle: false,
+      drawComposer: false,
+      drawLyricist: false,
+      drawCredits: false,
+      drawPartNames: false,
+      drawMeasureNumbers: true,
+    };
+    if (!state.scoreManager.osmd) {
+      state.scoreManager.osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(container, osmdOptions);
+    } else if (state.scoreManager.osmd.setOptions) {
+      state.scoreManager.osmd.setOptions(osmdOptions);
+    }
+
+    await state.scoreManager.osmd.load(xmlString);
+
+    // Show measure number on every measure + consistent system spacing
+    try {
+      const rules = state.scoreManager.osmd.EngravingRules || state.scoreManager.osmd.rules;
+      if (rules) {
+        rules.UseXMLMeasureNumbers = false;
+        rules.RenderMeasureNumbersOnlyAtSystemStart = false;
+        const setIfDefined = (key, val) => {
+          if (typeof rules[key] !== 'undefined') rules[key] = val;
+        };
+        setIfDefined('MeasureNumberLabelOffset', 0);
+        // Tight system spacing
+        setIfDefined('MinSkyBottomDistBetweenSystems', 2);
+        setIfDefined('MinimumDistanceBetweenSystems', 4);
+        setIfDefined('SystemDistance', 4);
+        setIfDefined('BetweenStaffDistance', 2);
+        setIfDefined('StaffDistance', 5);
+        setIfDefined('MinSkyBottomDistBetweenStaves', 1);
+        // Reduce title-to-staff distance
+        setIfDefined('TitleTopDistance', 2);
+        setIfDefined('TitleBottomDistance', 1);
+        setIfDefined('SheetTitleHeight', 4);
+        setIfDefined('PageTopMargin', 2);
+        setIfDefined('SheetMinimumDistanceBetweenTitleAndStaffline', 2);
+        // Hide courtesy clef shown at the end of each line before a clef change
+        setIfDefined('RenderClefsAtBeginningOfStaffline', true);
+        setIfDefined('ShowClefBeforeChange', false);
+        setIfDefined('RenderEndOfMeasureClefBeforeChange', false);
+        setIfDefined('DrawCourtesyAccidentals', false);
+      }
+    } catch (e) {
+      console.warn('Could not configure engraving rules:', e);
+    }
+
+    state.scoreManager.osmd.render();
+    state.scoreManager.scoreType = 'musicxml';
+    state.scoreManager._cursorBeat = -1;
+    state.scoreManager._setupCursor();
+    applyScalePostProcessing();
+    setupScalePostProcessingObserver();
+
+    // Force OSMD to fully position the cursor at the first note.
+    // We need to: advance forward then reset, which triggers OSMD's full
+    // position calculation. Then wait for layout/paint to settle.
+    setTimeout(() => {
+      try {
+        const cursor = state.scoreManager.osmd.cursor;
+        cursor.next();
+        cursor.reset();
+        state.scoreManager._cursorBeat = 0;
+      } catch (e) {}
+      // Use double rAF to ensure layout has fully settled before measuring
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const note = state.activeNotes[state.currentNoteIndex];
+          if (note && state.scoreManager.osmd) {
+            const cursorEl = state.scoreManager.osmd.cursor.cursorElement;
+            showNoteNameOverlay(note, cursorEl);
+          }
+        });
+      });
+    }, 50);
+  } catch (err) {
+    console.error('Failed to render scale MusicXML:', err);
   }
 }
 
 function updateScaleHighlight() {
   if (state.view !== 'scales') return;
-  const pills = els.scaleNoteDisplay.querySelectorAll('.scale-note-pill');
-  pills.forEach(pill => {
-    const idx = parseInt(pill.dataset.idx);
-    pill.classList.toggle('active-note', idx === state.currentNoteIndex);
-    pill.classList.toggle('played', idx < state.currentNoteIndex);
-  });
-  // Auto-scroll current pill into view
-  const activePill = els.scaleNoteDisplay.querySelector('.scale-note-pill.active-note');
-  if (activePill) {
-    activePill.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Always show note name overlay for the highlighted note
+  const note = state.activeNotes[state.currentNoteIndex];
+  if (note && state.scoreManager.osmd) {
+    const cursorEl = state.scoreManager.syncCursor(state.currentNoteIndex);
+    shiftCursorForCurrentSystem(cursorEl);
+    showNoteNameOverlay(note, cursorEl);
   }
 }
 
@@ -859,14 +1481,7 @@ function updateScaleSubModeUI() {
 }
 
 function showScaleComplete() {
-  const pills = els.scaleNoteDisplay.querySelectorAll('.scale-note-pill');
-  pills.forEach(pill => {
-    pill.classList.remove('active-note');
-    pill.classList.add('complete');
-  });
-  // Reset after 2 seconds
   setTimeout(() => {
-    pills.forEach(pill => pill.classList.remove('complete'));
     state.currentNoteIndex = 0;
     state.inTuneSince = 0;
     updateScaleHighlight();
@@ -938,26 +1553,10 @@ function init() {
   els.scoreContainer.addEventListener('click', handleScoreClick);
 
   // Scale mode event listeners
-  populateScaleKeySelect();
+  populateScaleKeyButtons();
+  populateScaleTypeButtons();
   els.viewTabs.forEach(tab => {
     tab.addEventListener('click', () => switchView(tab.dataset.view));
-  });
-  els.scaleKeySelect.addEventListener('change', (e) => {
-    state.scaleKey = parseInt(e.target.value);
-    if (state.isPlaying) stopPlayback();
-    updateScaleNotes();
-  });
-  els.scaleTypeSelect.addEventListener('change', (e) => {
-    const val = e.target.value;
-    if (val.startsWith('arp-')) {
-      state.scaleIsArpeggio = true;
-      state.scaleType = val.slice(4);
-    } else {
-      state.scaleIsArpeggio = false;
-      state.scaleType = val.slice(6); // strip "scale-"
-    }
-    if (state.isPlaying) stopPlayback();
-    updateScaleNotes();
   });
   els.submodePlayAlong.addEventListener('click', () => {
     if (state.isPlaying) stopPlayback();
@@ -979,9 +1578,6 @@ function init() {
 
   // Start on Scales tab
   switchView('scales');
-
-  // Auto-load sample score (in background for when user switches to Score tab)
-  loadSampleScore();
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {

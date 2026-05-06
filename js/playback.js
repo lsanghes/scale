@@ -15,6 +15,9 @@ export class ScorePlayer {
     this.onNoteIndex = null; // callback(noteIndex) each animation frame
     this.onProgress = null;  // callback(currentBeat) each animation frame
     this.onEnded = null;     // callback() when playback finishes
+    this.shouldLoop = false; // whether to loop after completion
+    this.loopDelayMs = 0;    // delay before looping
+    this._loopTimeout = null; // timeout for loop restart (separate from note timeouts)
   }
 
   play(notes, bpm, fromIndex = 0) {
@@ -52,6 +55,7 @@ export class ScorePlayer {
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     for (const t of this._timeouts) clearTimeout(t);
     this._timeouts = [];
+    if (this._loopTimeout) { clearTimeout(this._loopTimeout); this._loopTimeout = null; }
   }
 
   _tick() {
@@ -73,8 +77,16 @@ export class ScorePlayer {
     // Done when past the last note's end
     const last = notes[notes.length - 1];
     if (last && currentBeat >= last.startBeat + last.duration + 0.5) {
-      this.stop();
-      if (this.onEnded) this.onEnded();
+      if (this.shouldLoop) {
+        // Schedule loop restart after delay (separate timeout, not cleared by stop)
+        this.isPlaying = false;
+        this._loopTimeout = setTimeout(() => {
+          if (this.shouldLoop) this.play(this._notes, (60000 / this._msPerBeat), 0);
+        }, this.loopDelayMs);
+      } else {
+        this.stop();
+        if (this.onEnded) this.onEnded();
+      }
       return;
     }
 
