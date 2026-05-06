@@ -949,8 +949,30 @@ function getScaleTitle() {
   return `${keyName} ${typeLabel} ${kindLabel} - 3 Octaves`;
 }
 
+// Circle-of-fifths value for each root (semitone 0–11) and mode
+// Minor keys use their relative major's key signature (e.g. A minor = C major = 0)
+const MINOR_FIFTHS = [-3, 4, -1, -6, 1, -4, 3, -2, 5, 0, -5, 2];
+const KEY_FIFTHS = {
+  'Major':          [ 0, -5,  2, -3, 4, -1, 6, 1, -4, 3, -2, 5],
+  'Natural Minor':  MINOR_FIFTHS,
+  'Harmonic Minor': MINOR_FIFTHS,
+  'Melodic Minor':  MINOR_FIFTHS,
+  // Arpeggio types
+  'Minor':          MINOR_FIFTHS,
+  'Dominant 7th':   [ 0, -5,  2, -3, 4, -1, 6, 1, -4, 3, -2, 5],
+  'Diminished 7th': MINOR_FIFTHS,
+  'Augmented':      [ 0, -5,  2, -3, 4, -1, 6, 1, -4, 3, -2, 5],
+};
+
+function getKeyFifths() {
+  const table = KEY_FIFTHS[state.scaleType];
+  if (!table) return 0;
+  return table[state.scaleKey] ?? 0;
+}
+
 function generateScaleMusicXML(notes) {
   const title = getScaleTitle();
+  const fifths = getKeyFifths();
   // Clef ranges (within the 5 staff lines, no ledger lines)
   const CLEFS = {
     bass:   { sign: 'F', line: 4, low: 43, high: 57 },  // G2 to A3
@@ -980,23 +1002,57 @@ function generateScaleMusicXML(notes) {
     return bestClef;
   }
 
+  // Build a pitch-class → {step, alter} map from the scale's diatonic spelling
+  const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+  const NATURAL_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+  // Root letter index per semitone for sharp vs flat keys
+  const ROOT_LETTER_SHARP = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6];
+  const ROOT_LETTER_FLAT  = [0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6];
+
+  const useFlats = fifths < 0;
+  const rootLetterIdx = (useFlats ? ROOT_LETTER_FLAT : ROOT_LETTER_SHARP)[state.scaleKey];
+  const scaleIntervals = (() => {
+    if (state.scaleIsArpeggio) return ARPEGGIO_TYPES[state.scaleType] ?? [0, 4, 7];
+    const t = SCALE_TYPES[state.scaleType];
+    return Array.isArray(t) ? t : (t?.up ?? [0, 2, 4, 5, 7, 9, 11]);
+  })();
+
+  const spellingMap = new Map();
+  for (let i = 0; i < scaleIntervals.length; i++) {
+    const pc = (state.scaleKey + scaleIntervals[i]) % 12;
+    const letterIdx = (rootLetterIdx + i) % 7;
+    const alter = ((pc - NATURAL_SEMITONES[letterIdx] + 6) % 12) - 6;
+    spellingMap.set(pc, { step: LETTERS[letterIdx], alter });
+  }
+  // Fallback for any pitch class not in the scale (shouldn't happen for standard scales)
+  const SHARP_FALLBACK = ['C','C','D','D','E','F','F','G','G','A','A','B'];
+  const SHARP_ALTER_FB = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
+  const FLAT_FALLBACK  = ['C','D','D','E','E','F','G','G','A','A','B','B'];
+  const FLAT_ALTER_FB  = [ 0, -1,  0, -1,  0,  0,  0, -1,  0, -1,  0, -1];
+
   function generateNoteXml(note) {
-    const octaveOffset = Math.floor(note.midi / 12) - 1;
-    const noteInOctave = note.midi % 12;
-    const noteLetters = ['C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'];
-    const alterations = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0];
-    const noteLetter = noteLetters[noteInOctave];
-    const alteration = alterations[noteInOctave];
+    const pc = note.midi % 12;
+    let step, alter;
+    if (spellingMap.has(pc)) {
+      ({ step, alter } = spellingMap.get(pc));
+    } else {
+      step  = useFlats ? FLAT_FALLBACK[pc]  : SHARP_FALLBACK[pc];
+      alter = useFlats ? FLAT_ALTER_FB[pc]  : SHARP_ALTER_FB[pc];
+    }
+    // Octave based on natural (un-altered) pitch so E# and Cb land in the right octave
+    const octave = Math.floor((note.midi - alter) / 12) - 1;
 
     let alterXml = '';
-    if (alteration === 1) alterXml = '<alter>1</alter>';
-    else if (alteration === -1) alterXml = '<alter>-1</alter>';
+    if (alter === 1) alterXml = '<alter>1</alter>';
+    else if (alter === -1) alterXml = '<alter>-1</alter>';
+    else if (alter === 2) alterXml = '<alter>2</alter>';
+    else if (alter === -2) alterXml = '<alter>-2</alter>';
 
     return `<note>
       <pitch>
-        <step>${noteLetter}</step>
+        <step>${step}</step>
         ${alterXml}
-        <octave>${octaveOffset}</octave>
+        <octave>${octave}</octave>
       </pitch>
       <duration>4</duration>
       <type>quarter</type>
@@ -1029,6 +1085,9 @@ function generateScaleMusicXML(notes) {
     if (isFirst) {
       attributesXml = `<attributes>
         <divisions>4</divisions>
+        <key>
+          <fifths>${fifths}</fifths>
+        </key>
         <time print-object="no">
           <beats>${beats}</beats>
           <beat-type>4</beat-type>
@@ -1203,77 +1262,42 @@ function setupScalePostProcessingObserver() {
 }
 
 function hideCourtesyClefsAtLineEnds() {
-  // Find clef-like SVG elements at the right edge of each system and hide them.
   try {
     const svg = els.scoreContainer.querySelector('svg');
     if (!svg) return;
 
-    // Detect staff lines by geometry: wide and very thin
-    const allDrawn = svg.querySelectorAll('line, path, rect');
-    const horizontalLines = [];
-    allDrawn.forEach(el => {
+    // Clef glyphs (both initial and courtesy) are <g> elements with a direct
+    // <path> child, width 17–28 px, height > 15 px. In each system row the
+    // initial clef is the leftmost one; every other clef in that row is a
+    // courtesy clef and should be hidden.
+    const candidates = [];
+    svg.querySelectorAll('g').forEach(g => {
+      if (!g.querySelector(':scope > path')) return;
       let bbox;
-      try { bbox = el.getBBox(); } catch (_) { return; }
-      if (bbox.width > 50 && bbox.height < 3) {
-        horizontalLines.push(el);
-      }
+      try { bbox = g.getBBox(); } catch (_) { return; }
+      if (bbox.width < 17 || bbox.width > 28) return;
+      if (bbox.height < 15) return;
+      candidates.push({ el: g, bbox });
     });
-    if (!horizontalLines.length) return;
 
-    const lineData = horizontalLines.map(el => {
-      const bbox = el.getBBox();
-      return {
-        el,
-        y: bbox.y + bbox.height / 2,
-        x1: bbox.x,
-        x2: bbox.x + bbox.width,
-      };
-    }).sort((a, b) => a.y - b.y);
+    if (!candidates.length) return;
 
-    // Cluster by Y to find staves
-    const clusters = [];
-    let current = null;
-    for (const item of lineData) {
-      if (!current || item.y - current.items[current.items.length - 1].y > 25) {
-        current = { items: [item], minY: item.y, maxY: item.y };
-        clusters.push(current);
-      } else {
-        current.items.push(item);
-        current.maxY = item.y;
-      }
+    // Group candidates into system rows by vertical centre proximity
+    const rows = [];
+    for (const c of candidates) {
+      const cy = c.bbox.y + c.bbox.height / 2;
+      let row = rows.find(r => Math.abs(r.cy - cy) < 80);
+      if (!row) { row = { cy, items: [] }; rows.push(row); }
+      row.items.push(c);
     }
 
-    const staves = clusters.filter(c => c.items.length >= 5);
-    if (!staves.length) return;
-
-    // For each staff, find the X range and Y range
-    const staffInfo = staves.map(staff => {
-      const xMin = Math.min(...staff.items.map(it => it.x1));
-      const xMax = Math.max(...staff.items.map(it => it.x2));
-      return { minY: staff.minY, maxY: staff.maxY, xMin, xMax };
-    });
-
-    // Find and hide clef glyphs at the right edge of each staff
-    const allCandidates = svg.querySelectorAll('path, g[id*="clef"], g[class*="clef"]');
-    allCandidates.forEach(p => {
-      let bbox;
-      try { bbox = p.getBBox(); } catch (_) { return; }
-      if (bbox.width === 0 && bbox.height === 0) return;
-      const cx = bbox.x + bbox.width / 2;
-      const cy = bbox.y + bbox.height / 2;
-
-      for (const info of staffInfo) {
-        const staffHeight = info.maxY - info.minY;
-        const yMargin = staffHeight * 2;
-        if (cy < info.minY - yMargin || cy > info.maxY + yMargin) continue;
-        if (cx < info.xMax - 60 || cx > info.xMax + 25) continue;
-        if (bbox.height < staffHeight * 0.4) continue;
-        // Clefs are WIDE glyphs; stems are very narrow vertical lines
-        if (bbox.width < 8) continue;
-        p.style.display = 'none';
-        break;
+    // Keep the leftmost per row (initial clef), hide the rest (courtesy clefs)
+    for (const row of rows) {
+      row.items.sort((a, b) => a.bbox.x - b.bbox.x);
+      for (let i = 1; i < row.items.length; i++) {
+        row.items[i].el.style.display = 'none';
       }
-    });
+    }
   } catch (e) {
     console.warn('hideCourtesyClefsAtLineEnds failed:', e);
   }
