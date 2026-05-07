@@ -55,11 +55,11 @@ function makeNote(midi, rootMidiNote, beatIndex, row) {
 }
 
 /**
- * Generate a 3-octave scale or arpeggio.
+ * Generate a scale or arpeggio for the given number of octaves (1–3).
  * Scales use 1-3-2 intro, ascending by octave, descending by octave, 1-3-2-1 ending.
  * Arpeggios go straight up and down.
  */
-export function generateScaleNotes(keyIndex, typeName, isArpeggio) {
+export function generateScaleNotes(keyIndex, typeName, isArpeggio, octaves = 3) {
   const root = rootMidi(keyIndex);
   const types = isArpeggio ? ARPEGGIO_TYPES : SCALE_TYPES;
   const pattern = types[typeName];
@@ -70,12 +70,12 @@ export function generateScaleNotes(keyIndex, typeName, isArpeggio) {
   const downIntervals = hasDirectional ? pattern.down : pattern;
 
   if (isArpeggio) {
-    return generateArpeggio(root, upIntervals, downIntervals);
+    return generateArpeggio(root, upIntervals, downIntervals, octaves);
   }
-  return generateScale(root, upIntervals, downIntervals);
+  return generateScale(root, upIntervals, downIntervals, octaves);
 }
 
-function generateScale(root, upIntervals, downIntervals) {
+function generateScale(root, upIntervals, downIntervals, octaves) {
   const entries = []; // { midi, row }
   let row = 0;
 
@@ -84,31 +84,30 @@ function generateScale(root, upIntervals, downIntervals) {
   entries.push({ midi: root + upIntervals[2], row });
   entries.push({ midi: root + upIntervals[1], row });
 
-  // Rows 1-2: ascending octaves 1-2 (7 notes each: 1-2-3-4-5-6-7)
-  for (let oct = 0; oct < 2; oct++) {
+  // Ascending octaves (all but last)
+  for (let oct = 0; oct < octaves - 1; oct++) {
     row++;
     for (const interval of upIntervals) {
       entries.push({ midi: root + oct * 12 + interval, row });
     }
   }
 
-  // Row 3: ascending octave 3 + top note (8 notes: 1-2-3-4-5-6-7-1)
+  // Last ascending octave + top note
   row++;
   for (const interval of upIntervals) {
-    entries.push({ midi: root + 2 * 12 + interval, row });
+    entries.push({ midi: root + (octaves - 1) * 12 + interval, row });
   }
-  entries.push({ midi: root + 36, row }); // top Do
+  entries.push({ midi: root + octaves * 12, row }); // top Do
 
-  // Rows 4-6: descending octaves (7 notes each: 7-6-5-4-3-2-1)
-  for (let oct = 2; oct >= 0; oct--) {
+  // Descending octaves
+  for (let oct = octaves - 1; oct >= 0; oct--) {
     row++;
-    // Ti..Do (downIntervals reversed including root)
     for (let i = downIntervals.length - 1; i >= 0; i--) {
       entries.push({ midi: root + oct * 12 + downIntervals[i], row });
     }
   }
 
-  // Row 7: 3-2-1 ending
+  // 3-2-1 ending
   row++;
   entries.push({ midi: root + downIntervals[2], row });
   entries.push({ midi: root + downIntervals[1], row });
@@ -117,23 +116,23 @@ function generateScale(root, upIntervals, downIntervals) {
   return entries.map((e, i) => makeNote(e.midi, root, i, e.row));
 }
 
-function generateArpeggio(root, upIntervals, downIntervals) {
+function generateArpeggio(root, upIntervals, downIntervals, octaves) {
   const entries = [];
   let row = 0;
 
   // Ascending: one row per octave, top note on last ascending row
-  for (let oct = 0; oct < 3; oct++) {
+  for (let oct = 0; oct < octaves; oct++) {
     for (const interval of upIntervals) {
       entries.push({ midi: root + oct * 12 + interval, row });
     }
-    if (oct === 2) {
-      entries.push({ midi: root + 36, row }); // top note
+    if (oct === octaves - 1) {
+      entries.push({ midi: root + octaves * 12, row }); // top note
     }
     row++;
   }
 
   // Descending: one row per octave
-  for (let oct = 2; oct >= 0; oct--) {
+  for (let oct = octaves - 1; oct >= 0; oct--) {
     const octNotes = downIntervals.map(i => root + oct * 12 + i);
     octNotes.sort((a, b) => b - a);
     for (const midi of octNotes) {

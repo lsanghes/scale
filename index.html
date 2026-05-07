@@ -29,7 +29,6 @@
   </header>
 
   <nav id="view-tabs">
-    <button class="view-tab" data-view="score">Score</button>
     <button class="view-tab active" data-view="scales">Scales</button>
   </nav>
 
@@ -40,6 +39,11 @@
       <div class="submode-toggle">
         <button id="submode-play-along" class="active">Play Along</button>
         <button id="submode-detect">Detect</button>
+      </div>
+      <div class="submode-toggle" id="octave-buttons">
+        <button class="octave-btn" data-octaves="1">1 Oct</button>
+        <button class="octave-btn" data-octaves="2">2 Oct</button>
+        <button class="octave-btn active" data-octaves="3">3 Oct</button>
       </div>
     </div>
   </div>
@@ -94,7 +98,20 @@
 
   <div class="controls">
     <button id="play-btn" disabled>&#9654; Play</button>
-    <label class="bpm-label">BPM <input type="number" id="bpm-input" value="120" min="20" max="400"></label>
+    <label class="bpm-label">BPM <input type="number" id="bpm-input" value="60" min="20" max="400"></label>
+    <div class="bpm-presets">
+      <button class="bpm-preset" data-bpm="40">40</button>
+      <button class="bpm-preset" data-bpm="50">50</button>
+      <button class="bpm-preset" data-bpm="60">60</button>
+      <button class="bpm-preset" data-bpm="70">70</button>
+      <button class="bpm-preset" data-bpm="80">80</button>
+      <button class="bpm-preset" data-bpm="90">90</button>
+      <button class="bpm-preset" data-bpm="100">100</button>
+      <button class="bpm-preset" data-bpm="110">110</button>
+      <button class="bpm-preset" data-bpm="120">120</button>
+      <button class="bpm-preset" data-bpm="140">140</button>
+      <button class="bpm-preset" data-bpm="160">160</button>
+    </div>
     <button id="start-btn">Start</button>
   </div>
 
@@ -109,7 +126,21 @@
   <div id="focus-bar">
     <button id="expand-btn" title="Exit focus view">&#x2715;</button>
     <button id="focus-play-btn" disabled>&#9654; Play</button>
-    <label class="bpm-label">BPM <input type="number" id="focus-bpm-input" value="120" min="20" max="400"></label>
+    <label class="bpm-label">BPM <input type="number" id="focus-bpm-input" value="60" min="20" max="400"></label>
+    <div class="bpm-presets">
+      <button class="bpm-preset" data-bpm="40">40</button>
+      <button class="bpm-preset" data-bpm="50">50</button>
+      <button class="bpm-preset" data-bpm="60">60</button>
+      <button class="bpm-preset" data-bpm="70">70</button>
+      <button class="bpm-preset" data-bpm="80">80</button>
+      <button class="bpm-preset" data-bpm="90">90</button>
+      <button class="bpm-preset" data-bpm="100">100</button>
+      <button class="bpm-preset" data-bpm="120">120</button>
+      <button class="bpm-preset" data-bpm="140">140</button>
+      <button class="bpm-preset" data-bpm="160">160</button>
+      <button class="bpm-preset" data-bpm="180">180</button>
+      <button class="bpm-preset" data-bpm="200">200</button>
+    </div>
     <button id="focus-start-btn">Start</button>
   </div>
 

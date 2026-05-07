@@ -15,13 +15,60 @@ export class ScorePlayer {
     this.onNoteIndex = null; // callback(noteIndex) each animation frame
     this.onProgress = null;  // callback(currentBeat) each animation frame
     this.onEnded = null;     // callback() when playback finishes
+    this.onLoopRestart = null; // callback() when loop count-in begins
     this.shouldLoop = false; // whether to loop after completion
     this.loopDelayMs = 0;    // delay before looping
     this._loopTimeout = null; // timeout for loop restart (separate from note timeouts)
+    this._countingIn = false; // true while 4-click count-in is in progress
+  }
+
+  _playClick() {
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(900, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(450, ctx.currentTime + 0.06);
+    osc.connect(gain);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.06);
+  }
+
+  // Play 4 count-in clicks at `bpm`, then start note playback.
+  // `onCountBeat(n)` is called with n=4,3,2,1 as each click fires.
+  countIn(notes, bpm, fromIndex = 0, onCountBeat = null) {
+    this.stop();
+    this.isPlaying = true;
+    this._countingIn = true;
+    this._msPerBeat = 60000 / bpm;
+    this._onCountBeat = onCountBeat;
+    const BEATS = 4;
+
+    for (let i = 0; i < BEATS; i++) {
+      const delay = i * this._msPerBeat;
+      const t = setTimeout(() => {
+        if (!this.isPlaying) return;
+        this._playClick();
+        if (onCountBeat) onCountBeat(BEATS - i);
+      }, delay);
+      this._timeouts.push(t);
+    }
+
+    const startDelay = BEATS * this._msPerBeat;
+    const t = setTimeout(() => {
+      if (!this.isPlaying) return;
+      this._timeouts = [];
+      this.play(notes, bpm, fromIndex);
+    }, startDelay);
+    this._timeouts.push(t);
   }
 
   play(notes, bpm, fromIndex = 0) {
     this.stop();
+    this._countingIn = false;
     if (!this.player || !notes.length) return;
 
     console.log('[ScorePlayer] play()', { noteCount: notes.length, bpm, fromIndex, firstNote: notes[fromIndex] });
@@ -48,6 +95,42 @@ export class ScorePlayer {
     }
 
     this._tick();
+  }
+
+  changeBpm(bpm) {
+    if (!this.isPlaying || !this._notes.length) return;
+    if (this._countingIn) {
+      this.countIn(this._notes, bpm, this._fromIndex, this._onCountBeat);
+      return;
+    }
+    // Snapshot current beat, then cancel all pending note timeouts and reschedule
+    const elapsedMs = performance.now() - this._startMs;
+    const currentBeat = this._startBeat + elapsedMs / this._msPerBeat;
+
+    for (const t of this._timeouts) clearTimeout(t);
+    this._timeouts = [];
+
+    this._msPerBeat = 60000 / bpm;
+    this._startBeat = currentBeat;
+    this._startMs = performance.now();
+
+    // Find the next note at or after currentBeat and reschedule from there
+    const notes = this._notes;
+    let nextIdx = notes.length - 1;
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i].startBeat >= currentBeat) { nextIdx = i; break; }
+    }
+
+    for (let i = nextIdx; i < notes.length; i++) {
+      const note = notes[i];
+      const delayMs = (note.startBeat - currentBeat) * this._msPerBeat;
+      const durSecs = Math.max(0.05, note.duration * this._msPerBeat / 1000);
+      const timeout = setTimeout(() => {
+        if (!this.isPlaying) return;
+        this.player.play(note.midi, this.ctx.currentTime, { duration: durSecs, gain: 0.7 });
+      }, delayMs);
+      this._timeouts.push(timeout);
+    }
   }
 
   stop() {
@@ -81,7 +164,10 @@ export class ScorePlayer {
         // Schedule loop restart after delay (separate timeout, not cleared by stop)
         this.isPlaying = false;
         this._loopTimeout = setTimeout(() => {
-          if (this.shouldLoop) this.play(this._notes, (60000 / this._msPerBeat), 0);
+          if (this.shouldLoop) {
+            if (this.onLoopRestart) this.onLoopRestart();
+            this.countIn(this._notes, (60000 / this._msPerBeat), 0, this._onCountBeat);
+          }
         }, this.loopDelayMs);
       } else {
         this.stop();

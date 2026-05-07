@@ -16,10 +16,11 @@ export class ReferenceToneEngine {
   }
 
   /** Load the cello instrument samples from CDN. Call once before playing. */
-  async init() {
+  async init(destination) {
     if (this._loading) return this._loading;
     this._loading = Soundfont.instrument(this.ctx, 'cello', {
       soundfont: 'MusyngKite',
+      destination: destination || this.ctx.destination,
     }).then(player => {
       this.player = player;
     });

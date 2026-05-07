@@ -602,6 +602,23 @@ body.focused.scale-view #scale-container {
   gap: 5px;
 }
 
+.bpm-presets {
+  display: flex;
+  gap: 3px;
+}
+
+.bpm-preset {
+  padding: 4px 7px;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  min-width: unset;
+}
+
+.bpm-preset.active {
+  background: #e94560;
+  border-color: #e94560;
+}
+
 #bpm-input {
   width: 58px;
   background: #0f3460;
