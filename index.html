@@ -7,122 +7,57 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header>
-    <h1>Playable</h1>
-    <div class="toolbar-group">
-      <button id="load-btn">Load Score</button>
-      <input type="file" id="file-input" accept=".musicxml,.xml,.mxl,.mid,.midi">
-      <select id="part-select" disabled>
-        <option>Part</option>
-      </select>
-      <select id="mode-select">
-        <option value="simultaneous">Simultaneous</option>
-        <option value="ping">Ping</option>
-        <option value="drone">Drone</option>
-      </select>
-      <select id="scroll-mode-select" title="Scroll mode">
-        <option value="jump">Scroll: Jump</option>
-        <option value="continuous" selected>Scroll: Continuous</option>
-      </select>
-      <button id="collapse-btn" title="Focus view (F)">&#x26F6;</button>
+<div id="top-panel" data-state="selection">
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-panel="selection">Selection</button>
+      <button class="panel-tab" data-panel="intonation">Intonation</button>
+      <button class="panel-tab" data-panel="none">—</button>
     </div>
-  </header>
-
-  <nav id="view-tabs">
-    <button class="view-tab active" data-view="scales">Scales</button>
-  </nav>
-
-  <div id="scale-container" style="display:none">
-    <div class="scale-controls">
-      <div id="scale-key-buttons" class="scale-key-buttons"></div>
-      <div id="scale-type-buttons" class="scale-type-buttons"></div>
-      <div class="submode-toggle">
-        <button id="submode-play-along" class="active">Play Along</button>
-        <button id="submode-detect">Detect</button>
+    <div id="panel-selection">
+      <div class="scale-controls">
+        <div id="scale-key-buttons" class="scale-key-buttons"></div>
+        <div id="scale-type-buttons" class="scale-type-buttons"></div>
+        <button class="oct-btn" id="oct-btn">3 Octaves</button>
       </div>
-      <div class="submode-toggle" id="octave-buttons">
-        <button class="octave-btn" data-octaves="1">1 Oct</button>
-        <button class="octave-btn" data-octaves="2">2 Oct</button>
-        <button class="octave-btn active" data-octaves="3">3 Oct</button>
-        <button class="octave-btn" data-octaves="4">4 Oct</button>
+    </div>
+    <div id="panel-intonation">
+      <div class="note-display">
+        <div class="note-box detected">
+          <label>Detected</label>
+          <div class="note-name" id="detected-note">-</div>
+          <div class="note-freq" id="detected-freq"></div>
+        </div>
+        <div class="note-box target">
+          <label>Target</label>
+          <div class="note-name" id="target-note">-</div>
+        </div>
       </div>
+      <div class="cents-meter" id="cents-meter">
+        <div class="cents-track">
+          <div class="cents-center"></div>
+          <div class="cents-indicator" id="cents-indicator"></div>
+        </div>
+      </div>
+      <div class="cents-labels">
+        <span>-50¢</span>
+        <span>0</span>
+        <span>+50¢</span>
+      </div>
+      <div class="cents-value" id="cents-value"></div>
     </div>
   </div>
 
   <div id="score-title"></div>
   <div id="score-wrapper">
-    <div id="score-container">
-      <p>Load a MusicXML or MIDI file to see the score, or just start for free play.</p>
-    </div>
+    <div id="score-container"></div>
   </div>
   <div id="note-name-overlay" class="note-name-overlay" style="display:none"></div>
-  <div id="midi-note-list"></div>
-
-  <div class="pitch-hud">
-    <div class="note-display">
-      <div class="note-box detected">
-        <label>Detected</label>
-        <div class="note-name" id="detected-note">-</div>
-        <div class="note-freq" id="detected-freq"></div>
-      </div>
-      <div class="note-box target">
-        <label>Target</label>
-        <div class="note-name" id="target-note">-</div>
-      </div>
-    </div>
-
-    <div class="cents-meter" id="cents-meter">
-      <div class="cents-track">
-        <div class="cents-center"></div>
-        <div class="cents-indicator" id="cents-indicator"></div>
-      </div>
-    </div>
-    <div class="cents-labels">
-      <span>-50¢</span>
-      <span>0</span>
-      <span>+50¢</span>
-    </div>
-    <div class="cents-value" id="cents-value"></div>
-
-    <div class="confidence">
-      <span>Confidence</span>
-      <div class="confidence-track">
-        <div class="confidence-bar" id="confidence-bar"></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="navigation">
-    <button id="prev-measure" title="Previous measure">⏮ Measure</button>
-    <button id="prev-note" title="Previous note">◀ Note</button>
-    <span class="measure-info" id="measure-info">Load a score to begin</span>
-    <button id="next-note" title="Next note">Note ▶</button>
-    <button id="next-measure" title="Next measure">Measure ⏭</button>
-  </div>
 
   <div class="controls">
     <button id="play-btn" disabled>&#9654; Play</button>
     <div class="bpm-group" id="bpm-group"><button class="bpm-step" id="bpm-dec" title="BPM -1">−</button><div class="bpm-scrub" id="bpm-scrub" title="Drag to change BPM · tap to type"><span class="bpm-scrub-label">BPM</span><span class="bpm-scrub-val" id="bpm-scrub-val">120</span></div><button class="bpm-step" id="bpm-inc" title="BPM +1">+</button></div>
     <button id="loop-btn" class="active" title="Toggle loop">⟳</button>
     <button id="note-name-btn" class="active" title="Toggle note names">♩C</button>
-    <button id="start-btn">Start</button>
-  </div>
-
-  <div class="keyboard-hints">
-    <kbd>Space</kbd> Play/Stop &nbsp;
-    <kbd>←</kbd> Prev note &nbsp;
-    <kbd>→</kbd> Next note &nbsp;
-    <kbd>P</kbd> Play/Stop &nbsp;
-    <kbd>F</kbd> Focus
-  </div>
-
-  <div id="focus-bar">
-    <button id="expand-btn" title="Exit focus view">&#x2715;</button>
-    <button id="focus-play-btn" disabled>&#9654; Play</button>
-    <div class="bpm-group" id="focus-bpm-group"><button class="bpm-step" id="focus-bpm-dec" title="BPM -1">−</button><div class="bpm-scrub" id="focus-bpm-scrub" title="Drag to change BPM · tap to type"><span class="bpm-scrub-label">BPM</span><span class="bpm-scrub-val" id="focus-bpm-scrub-val">120</span></div><button class="bpm-step" id="focus-bpm-inc" title="BPM +1">+</button></div>
-    <button id="focus-loop-btn" class="active" title="Toggle loop">⟳</button>
-    <button id="focus-note-name-btn" class="active" title="Toggle note names">♩C</button>
-    <button id="focus-start-btn">Start</button>
   </div>
 
   <!-- CDN dependencies -->

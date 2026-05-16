@@ -8,29 +8,10 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #1a1a2e;
   color: #e0e0e0;
-  min-height: 100vh;
-}
-
-header {
-  background: #16213e;
-  padding: 12px 20px;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  border-bottom: 1px solid #0f3460;
-}
-
-header h1 {
-  font-size: 1.2rem;
-  color: #e94560;
-  margin-right: auto;
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
 }
 
 button {
@@ -53,55 +34,65 @@ button.active {
   border-color: #e94560;
 }
 
-select {
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a5276;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-
-#file-input {
-  display: none;
-}
-
-/* View tabs */
-#view-tabs {
-  display: flex;
-  background: #16213e;
+/* Top panel */
+#top-panel {
+  background: #1a1a2e;
   border-bottom: 1px solid #0f3460;
-  padding: 0 20px;
+  flex-shrink: 0;
 }
 
-.view-tab {
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid #0f3460;
+}
+
+.panel-tab {
+  flex: 1;
+  padding: 9px 12px;
+  font-size: 0.8rem;
   background: transparent;
   border: none;
-  border-bottom: 3px solid transparent;
   border-radius: 0;
-  padding: 10px 20px;
-  font-size: 0.9rem;
-  color: #888;
+  border-bottom: 2px solid transparent;
+  color: #666;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  transition: color 0.15s, border-color 0.15s;
 }
 
-.view-tab:hover {
+.panel-tab:hover {
   color: #e0e0e0;
   background: transparent;
 }
 
-.view-tab.active {
+.panel-tab.active {
   color: #e94560;
   border-bottom-color: #e94560;
   background: transparent;
 }
 
-/* Scale mode */
-#scale-container {
-  padding: 16px 20px;
-  background: #1a1a2e;
+#panel-selection,
+#panel-intonation {
+  display: none;
 }
+
+#top-panel[data-state="selection"] #panel-selection {
+  display: block;
+}
+
+#top-panel[data-state="intonation"] #panel-intonation {
+  display: block;
+}
+
+#panel-selection {
+  padding: 16px 20px 0;
+}
+
+#panel-intonation {
+  padding: 20px 20px 16px;
+  text-align: center;
+}
+
+/* Scale mode */
 
 .scale-controls {
   display: flex;
@@ -248,30 +239,21 @@ select {
   background: #1a5276;
 }
 
-.submode-toggle {
-  display: flex;
-  gap: 0;
-}
-
-.submode-toggle button {
-  border-radius: 0;
+.oct-btn {
   padding: 8px 16px;
   font-size: 0.85rem;
   border: 1px solid #1a5276;
+  border-radius: 6px;
+  background: #0f3460;
+  color: #e0e0e0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.submode-toggle button:first-child {
-  border-radius: 6px 0 0 6px;
-}
-
-.submode-toggle button:last-child {
-  border-radius: 0 6px 6px 0;
-  border-left: none;
-}
-
-.submode-toggle button.active {
-  background: #e94560;
-  border-color: #e94560;
+.oct-btn:hover {
+  border-color: #2980b9;
+  background: #1a5276;
 }
 
 #scale-note-display {
@@ -346,22 +328,6 @@ select {
   font-weight: bold;
 }
 
-/* Hide score-specific elements in scale view */
-body.scale-view #midi-note-list,
-body.scale-view .navigation,
-body.scale-view #load-btn,
-body.scale-view #file-input,
-body.scale-view #part-select,
-body.scale-view #scroll-mode-select {
-  display: none;
-}
-
-/* Focus mode + scale view */
-body.focused.scale-view #scale-container {
-  display: block;
-  max-height: calc(100vh - 56px);
-  overflow-y: auto;
-}
 
 /* Note name overlay (shown during playback) */
 .note-name-overlay {
@@ -383,11 +349,6 @@ body.focused.scale-view #scale-container {
 
 
 /* Score area */
-#score-wrapper {
-  position: relative;
-  overflow: hidden;
-}
-
 #score-title {
   background: #fff;
   color: #333;
@@ -396,14 +357,21 @@ body.focused.scale-view #scale-container {
   font-weight: bold;
   padding: 10px 0 50px;
   display: none;
+  flex-shrink: 0;
+}
+
+#score-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 #score-container {
   background: #fff;
   color: #333;
-  min-height: 120px;
-  max-height: 300px;
-  overflow: auto;
+  height: 100%;
+  overflow-y: auto;
   margin: 0;
   cursor: pointer;
 }
@@ -420,57 +388,6 @@ body.focused.scale-view #scale-container {
 
 #score-container p.info {
   color: #666;
-}
-
-/* MIDI note list */
-#midi-note-list {
-  padding: 10px 20px;
-  max-height: 200px;
-  overflow-y: auto;
-  background: #16213e;
-}
-
-.midi-measure {
-  display: inline-block;
-  padding: 6px 10px;
-  margin: 3px;
-  border-radius: 6px;
-  background: #0f3460;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.midi-measure:hover {
-  background: #1a5276;
-}
-
-.midi-measure.active-measure {
-  background: #e94560;
-}
-
-.midi-measure-num {
-  font-weight: bold;
-  color: #aaa;
-  font-size: 0.8rem;
-}
-
-.midi-note-item {
-  color: #e0e0e0;
-  font-size: 0.9rem;
-}
-
-.midi-note-item.active-note {
-  background: #e94560;
-  color: #fff;
-  border-radius: 3px;
-  padding: 1px 5px;
-  font-weight: bold;
-}
-
-/* Pitch HUD */
-.pitch-hud {
-  padding: 30px 20px;
-  text-align: center;
 }
 
 .note-display {
@@ -586,49 +503,6 @@ body.focused.scale-view #scale-container {
   font-variant-numeric: tabular-nums;
 }
 
-/* Confidence */
-.confidence {
-  max-width: 500px;
-  margin: 15px auto 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.75rem;
-  color: #666;
-}
-
-.confidence-track {
-  flex: 1;
-  height: 4px;
-  background: #0f3460;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.confidence-bar {
-  height: 100%;
-  background: #4fc3f7;
-  width: 0%;
-  transition: width 0.1s;
-}
-
-/* Navigation */
-.navigation {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  padding: 15px;
-  border-top: 1px solid #0f3460;
-}
-
-.measure-info {
-  font-size: 0.85rem;
-  color: #888;
-  min-width: 200px;
-  text-align: center;
-}
-
 /* Controls */
 .controls {
   display: flex;
@@ -637,6 +511,7 @@ body.focused.scale-view #scale-container {
   gap: 12px;
   padding: 15px;
   border-top: 1px solid #0f3460;
+  flex-shrink: 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -656,7 +531,7 @@ body.focused.scale-view #scale-container {
   border-radius: 30px;
 }
 
-#play-btn, #focus-play-btn {
+#play-btn {
   font-size: 1rem;
   padding: 10px 24px;
   border-radius: 30px;
@@ -737,9 +612,11 @@ body.focused.scale-view #scale-container {
   line-height: 1;
 }
 
-#count-in-btn, #focus-count-in-btn,
-#loop-btn, #focus-loop-btn,
-#note-name-btn, #focus-note-name-btn {
+#loop-btn {
+  font-size: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border-radius: 4px;
   width: 32px;
@@ -748,97 +625,14 @@ body.focused.scale-view #scale-container {
   text-align: center;
 }
 
-#count-in-btn, #focus-count-in-btn,
-#note-name-btn, #focus-note-name-btn {
+#note-name-btn {
   font-size: 0.85rem;
-}
-
-#loop-btn, #focus-loop-btn {
-  font-size: 1.4rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#bpm-input {
-  width: 58px;
-  background: #0f3460;
-  color: #e0e0e0;
-  border: 1px solid #1a5276;
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  padding: 0;
+  border-radius: 4px;
+  width: 32px;
+  height: 28px;
+  line-height: 28px;
   text-align: center;
-}
-
-/* Keyboard hints */
-.keyboard-hints {
-  text-align: center;
-  padding: 8px;
-  font-size: 0.7rem;
-  color: #555;
-}
-
-kbd {
-  background: #0f3460;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 0.7rem;
-}
-
-/* Focus bar (visible only in collapsed/focus mode) */
-#focus-bar {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
-  background: rgba(22, 33, 62, 0.92);
-  backdrop-filter: blur(6px);
-  border-top: 1px solid #0f3460;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-#focus-bar::-webkit-scrollbar {
-  display: none;
-}
-
-#focus-bar > * {
-  flex-shrink: 0;
-}
-
-#expand-btn {
-  font-size: 1rem;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: #0f3460;
-  border-color: #1a5276;
-}
-
-/* Collapsed / focus mode */
-body.focused header,
-body.focused .pitch-hud,
-body.focused .navigation,
-body.focused .controls,
-body.focused .keyboard-hints,
-body.focused #midi-note-list {
-  display: none;
-}
-
-body.focused #score-container {
-  max-height: calc(100vh - 56px); /* leave room for focus-bar */
-  height: calc(100vh - 56px);
-}
-
-body.focused #focus-bar {
-  display: flex;
 }
 
 /* Responsive */
@@ -848,8 +642,5 @@ body.focused #focus-bar {
   }
   .note-box .note-name {
     font-size: 2rem;
-  }
-  header {
-    padding: 8px 12px;
   }
 }

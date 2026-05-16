@@ -33,7 +33,6 @@ const state = {
   activeNotes: [], // notes for the selected part
   inTuneSince: 0,  // timestamp when player was first in-tune on current note
   view: 'score',           // 'score' | 'scales'
-  scaleSubMode: 'playAlong', // 'playAlong' | 'detect'
   scaleKey: 0,
   scaleType: 'Major',
   scaleIsArpeggio: false,
@@ -53,54 +52,27 @@ const state = {
 const els = {};
 
 function initDOM() {
-  els.fileInput = document.getElementById('file-input');
-  els.loadBtn = document.getElementById('load-btn');
-  els.partSelect = document.getElementById('part-select');
-  els.modeSelect = document.getElementById('mode-select');
-  els.startBtn = document.getElementById('start-btn');
   els.detectedNote = document.getElementById('detected-note');
   els.detectedFreq = document.getElementById('detected-freq');
   els.targetNote = document.getElementById('target-note');
   els.centsValue = document.getElementById('cents-value');
   els.centsIndicator = document.getElementById('cents-indicator');
   els.centsMeter = document.getElementById('cents-meter');
-  els.measureInfo = document.getElementById('measure-info');
   els.scoreContainer = document.getElementById('score-container');
   els.scoreWrapper = document.getElementById('score-wrapper');
   els.scoreTitle = document.getElementById('score-title');
-  els.prevNote = document.getElementById('prev-note');
-  els.nextNote = document.getElementById('next-note');
-  els.prevMeasure = document.getElementById('prev-measure');
-  els.nextMeasure = document.getElementById('next-measure');
-  els.midiNoteList = document.getElementById('midi-note-list');
-  els.confidenceBar = document.getElementById('confidence-bar');
   els.playBtn = document.getElementById('play-btn');
-  els.collapseBtn = document.getElementById('collapse-btn');
-  els.expandBtn = document.getElementById('expand-btn');
-  els.focusPlayBtn = document.getElementById('focus-play-btn');
-  els.focusStartBtn = document.getElementById('focus-start-btn');
-  els.scrollModeSelect = document.getElementById('scroll-mode-select');
   els.loopBtn = document.getElementById('loop-btn');
-  els.focusLoopBtn = document.getElementById('focus-loop-btn');
   els.noteNameBtn = document.getElementById('note-name-btn');
-  els.focusNoteNameBtn = document.getElementById('focus-note-name-btn');
   els.bpmGroup = document.getElementById('bpm-group');
-  els.focusBpmGroup = document.getElementById('focus-bpm-group');
   els.bpmScrub = document.getElementById('bpm-scrub');
   els.bpmScrubVal = document.getElementById('bpm-scrub-val');
-  els.focusBpmScrub = document.getElementById('focus-bpm-scrub');
-  els.focusBpmScrubVal = document.getElementById('focus-bpm-scrub-val');
   els.bpmDec = document.getElementById('bpm-dec');
   els.bpmInc = document.getElementById('bpm-inc');
-  els.focusBpmDec = document.getElementById('focus-bpm-dec');
-  els.focusBpmInc = document.getElementById('focus-bpm-inc');
   // Scale mode elements
-  els.viewTabs = document.querySelectorAll('.view-tab');
-  els.scaleContainer = document.getElementById('scale-container');
+  els.topPanel = document.getElementById('top-panel');
   els.scaleKeyButtons = document.getElementById('scale-key-buttons');
   els.scaleTypeButtons = document.getElementById('scale-type-buttons');
-  els.submodePlayAlong = document.getElementById('submode-play-along');
-  els.submodeDetect = document.getElementById('submode-detect');
   els.noteNameOverlay = document.getElementById('note-name-overlay');
 }
 
@@ -177,22 +149,10 @@ function setPlayBtnState(loading, playing) {
   els.playBtn.textContent = text;
   els.playBtn.disabled = disabled;
   els.playBtn.classList.toggle('active', playing);
-  els.focusPlayBtn.textContent = text;
-  els.focusPlayBtn.disabled = disabled;
-  els.focusPlayBtn.classList.toggle('active', playing);
-}
-
-function setStartBtnState(listening) {
-  const text = listening ? 'Stop' : 'Start';
-  els.startBtn.textContent = text;
-  els.startBtn.classList.toggle('active', listening);
-  els.focusStartBtn.textContent = text;
-  els.focusStartBtn.classList.toggle('active', listening);
 }
 
 function enablePlayBtns(enabled) {
   els.playBtn.disabled = !enabled;
-  els.focusPlayBtn.disabled = !enabled;
 }
 
 function getBpm() {
@@ -203,12 +163,7 @@ function setBpm(val) {
   const bpm = Math.max(1, Math.min(400, Math.round(parseInt(val) || 120)));
   state.bpm = bpm;
   els.bpmScrubVal.textContent = bpm;
-  els.focusBpmScrubVal.textContent = bpm;
   if (state.scorePlayer?.isPlaying) state.scorePlayer.changeBpm(bpm);
-}
-
-function toggleFocus() {
-  document.body.classList.toggle('focused');
 }
 
 function ensureAudioContext() {
@@ -234,39 +189,16 @@ function ensureAudioContext() {
   return state.audioContext;
 }
 
-// File loading
-async function handleFileLoad() {
-  const file = els.fileInput.files[0];
-  if (!file) return;
-  await loadScoreData(() => state.scoreManager.loadFile(file));
-}
-
+// File loading (score mode removed — scales only)
 async function loadScoreData(loader) {
   els.scoreContainer.innerHTML = '<p>Loading score...</p>';
-  els.midiNoteList.innerHTML = '';
 
   try {
     await loader();
     state.scoreLoaded = true;
-
-    const parts = state.scoreManager.getParts();
-    els.partSelect.innerHTML = '';
-    parts.forEach((name, idx) => {
-      const opt = document.createElement('option');
-      opt.value = idx;
-      opt.textContent = name;
-      els.partSelect.appendChild(opt);
-    });
-    els.partSelect.disabled = false;
-
     selectPart(0);
     setBpm(state.scoreManager.getBPM());
     enablePlayBtns(true);
-
-    if (state.scoreManager.scoreType === 'midi') {
-      els.scoreContainer.innerHTML = '<p class="info">MIDI file loaded — note list shown below.</p>';
-      renderMidiNoteList();
-    }
   } catch (err) {
     els.scoreContainer.innerHTML = `<p class="error">Error loading score: ${err.message}</p>`;
     console.error(err);
@@ -280,37 +212,6 @@ async function loadSampleScore() {
     const text = await res.text();
     await loadScoreData(() => state.scoreManager._loadMusicXML(text));
   } catch (_) {}
-}
-
-function renderMidiNoteList() {
-  const notes = state.activeNotes;
-  if (notes.length === 0) {
-    els.midiNoteList.innerHTML = '<p>No notes found in this part.</p>';
-    return;
-  }
-
-  let currentMeasure = 0;
-  let html = '';
-  for (let i = 0; i < notes.length; i++) {
-    const note = notes[i];
-    if (note.measure !== currentMeasure) {
-      if (currentMeasure !== 0) html += '</div>';
-      currentMeasure = note.measure;
-      html += `<div class="midi-measure" data-measure="${currentMeasure}">`;
-      html += `<span class="midi-measure-num">M${currentMeasure}</span> `;
-    }
-    html += `<span class="midi-note-item" data-idx="${i}">${note.name}</span> `;
-  }
-  html += '</div>';
-  els.midiNoteList.innerHTML = html;
-
-  // Click handler for measures
-  els.midiNoteList.querySelectorAll('.midi-measure').forEach((el) => {
-    el.addEventListener('click', () => {
-      const m = parseInt(el.dataset.measure);
-      jumpToMeasure(m);
-    });
-  });
 }
 
 function selectPart(partIndex) {
@@ -366,7 +267,6 @@ function jumpToMeasure(measure) {
     state.currentNoteIndex = idx;
   }
   updateTargetDisplay();
-  updateMidiHighlight();
 
   // In drone mode, start droning the target note
   if (state.mode === 'drone' && state.referenceTone) {
@@ -387,8 +287,6 @@ function advanceNote(delta) {
     updateTargetDisplay();
     if (state.view === 'scales') {
       updateScaleHighlight();
-    } else {
-      updateMidiHighlight();
     }
 
     if (state.referenceTone) {
@@ -409,17 +307,13 @@ function updateTargetDisplay() {
   const note = state.activeNotes[state.currentNoteIndex];
   if (note) {
     els.targetNote.textContent = note.name;
-    if (state.view === 'scales') {
-      els.measureInfo.textContent = `Note ${state.currentNoteIndex + 1}/${state.activeNotes.length}`;
-    } else {
-      els.measureInfo.textContent = `Measure ${note.measure} — Note ${state.currentNoteIndex + 1}/${state.activeNotes.length}`;
+    if (state.view !== 'scales') {
       // Sync OSMD cursor and scroll
       const cursorEl = state.scoreManager.syncCursor(note.scoreStartBeat ?? note.startBeat);
       scrollScoreToCursor(cursorEl, note);
     }
   } else {
     els.targetNote.textContent = '-';
-    els.measureInfo.textContent = state.scoreLoaded ? 'No notes' : 'Load a score to begin';
   }
 }
 
@@ -541,26 +435,12 @@ function startContinuousScroll() {
   state._scrollRafId = requestAnimationFrame(tick);
 }
 
-function updateMidiHighlight() {
-  if (state.scoreManager.scoreType !== 'midi') return;
-  els.midiNoteList.querySelectorAll('.midi-measure').forEach((el) => {
-    el.classList.toggle('active-measure', parseInt(el.dataset.measure) === state.currentMeasure);
-  });
-  // Highlight the specific note
-  const activeNoteEl = els.midiNoteList.querySelector(`.midi-note-item[data-idx="${state.currentNoteIndex}"]`);
-  els.midiNoteList.querySelectorAll('.midi-note-item').forEach((el) => el.classList.remove('active-note'));
-  if (activeNoteEl) {
-    activeNoteEl.classList.add('active-note');
-    activeNoteEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-}
-
 // Score click handling for OSMD
 const OSMD_SCALE = 10;
 
 function getNotesPerMeasure() {
-  if (state.scaleType === 'Chromatic') return 12;
-  if (state.scaleType === 'Major Broken Third' || state.scaleType === 'Melodic Minor Broken Third') return 14;
+  if (state.scaleType === 'Chromatic') return 8;
+  if (state.scaleType === 'Major Broken Third' || state.scaleType === 'Melodic Minor Broken Third') return 8;
   switch (state.scaleOctaves) {
     case 1: return state.activeNotes.length || 16; // all notes in one measure
     case 2: return 8;
@@ -643,7 +523,6 @@ function handleScoreClick(event) {
     state.inTuneSince = 0;
     updateTargetDisplay();
     if (state.view === 'scales') updateScaleHighlight();
-    else updateMidiHighlight();
     if (wasPlaying) startPlayback();
   }
 }
@@ -765,7 +644,6 @@ async function startPlayback() {
           state.currentMeasure = nextMeasure;
           state._lastPlaybackMeasure = nextMeasure;
           updateTargetDisplay();
-          updateMidiHighlight();
         }
       };
       state.scorePlayer.onProgress = (currentBeat) => {
@@ -789,11 +667,9 @@ async function startPlayback() {
     state.scorePlayer.countIn(state.activeNotes, bpm, state.currentNoteIndex, (beat) => {
       setPlayBtnState(false, true);
       els.playBtn.textContent = beat;
-      els.focusPlayBtn.textContent = beat;
       if (beat === 1) {
         setTimeout(() => {
           els.playBtn.textContent = '⏹ Stop';
-          els.focusPlayBtn.textContent = '⏹ Stop';
         }, 60000 / bpm);
       }
     });
@@ -819,14 +695,6 @@ function stopPlayback() {
 }
 
 // Mic toggle
-async function toggleListening() {
-  if (state.isListening) {
-    stopListening();
-  } else {
-    await startListening();
-  }
-}
-
 async function startListening() {
   // Mutually exclusive with playback
   if (state.isPlaying) stopPlayback();
@@ -846,7 +714,6 @@ async function startListening() {
   try {
     await state.pitchDetector.start();
     state.isListening = true;
-    setStartBtnState(true);
 
     // Start reference tone if in the right mode
     const note = state.activeNotes[state.currentNoteIndex];
@@ -867,13 +734,11 @@ function stopListening() {
   state.isListening = false;
   if (state.pitchDetector) state.pitchDetector.stop();
   if (state.referenceTone) state.referenceTone.stopAll();
-  setStartBtnState(false);
   els.detectedNote.textContent = '-';
   els.detectedFreq.textContent = '';
   els.centsValue.textContent = '';
   els.centsIndicator.style.left = '50%';
   els.centsMeter.className = 'cents-meter';
-  els.confidenceBar.style.width = '0%';
 }
 
 // Main loop
@@ -883,7 +748,7 @@ function mainLoop() {
   const result = state.pitchDetector.detect();
 
   if (result && result.confidence > 0.66) {
-    const { frequency, confidence } = result;
+    const { frequency } = result;
     const nearestMidi = nearestNoteNumber(frequency);
     const noteName = noteNumberToName(nearestMidi);
     const nearestFreq = noteNumberToFrequency(nearestMidi);
@@ -893,8 +758,6 @@ function mainLoop() {
     els.detectedNote.textContent = noteName;
     els.detectedFreq.textContent = `${frequency.toFixed(1)} Hz`;
     els.centsValue.textContent = `${cents >= 0 ? '+' : ''}${cents.toFixed(1)}¢`;
-    els.confidenceBar.style.width = `${(confidence * 100).toFixed(0)}%`;
-
     // Cents meter: map -50..+50 to 0%..100%
     const pct = Math.max(0, Math.min(100, (cents + 50) * (100 / 100)));
     els.centsIndicator.style.left = `${pct}%`;
@@ -956,7 +819,6 @@ function mainLoop() {
     }
   } else {
     // No pitch detected
-    els.confidenceBar.style.width = '0%';
     // No pitch detected — simultaneous tone keeps playing until silence
 
   }
@@ -967,25 +829,9 @@ function mainLoop() {
 // ── Scale Mode ──
 
 function switchView(view) {
-  if (state.isPlaying) stopPlayback();
-  if (state.isListening) stopListening();
   state.view = view;
-
-  els.viewTabs.forEach(tab => tab.classList.toggle('active', tab.dataset.view === view));
-  document.body.classList.toggle('scale-view', view === 'scales');
-
-  if (view === 'scales') {
-    els.scaleContainer.style.display = '';
-    updateScaleNotes();
-    updateScaleSubModeUI();
-  } else {
-    els.scaleContainer.style.display = 'none';
-    if (els.scoreTitle) els.scoreTitle.style.display = 'none';
-    els.scoreContainer.style.marginTop = '';
-    if (els.scoreWrapper) els.scoreWrapper.style.height = '';
-    enablePlayBtns(state.scoreLoaded);
-    if (!state.scoreLoaded) loadSampleScore();
-  }
+  updateScaleNotes();
+  updateScaleSubModeUI();
 }
 
 function populateScaleKeyButtons() {
@@ -1577,13 +1423,8 @@ function cropSvgToContent() {
     // Shift the container (SVG + cursor both move together, keeping alignment).
     // The wrapper's overflow:hidden clips the shifted-up empty region.
     els.scoreContainer.style.height = `${contentBottomPx}px`;
-    els.scoreContainer.style.maxHeight = 'none';
-    els.scoreContainer.style.overflow = 'hidden';
     els.scoreContainer.style.marginTop = `-${topCropPx}px`;
 
-    if (els.scoreWrapper) {
-      els.scoreWrapper.style.height = `${contentBottomPx - topCropPx}px`;
-    }
   } catch (e) {
     console.warn('cropSvgToContent failed:', e);
   }
@@ -1792,32 +1633,8 @@ function updateScaleHighlight() {
 }
 
 function updateScaleSubModeUI() {
-  const isPlayAlong = state.scaleSubMode === 'playAlong';
-  els.submodePlayAlong.classList.toggle('active', isPlayAlong);
-  els.submodeDetect.classList.toggle('active', !isPlayAlong);
-
-  // Play Along: show play/bpm controls, hide start
-  // Detect: hide play/bpm controls and start, auto-start mic
-  const disp = v => v ? '' : 'none';
-  els.playBtn.style.display = disp(isPlayAlong);
-  els.focusPlayBtn.style.display = disp(isPlayAlong);
-  els.bpmGroup.style.display = disp(isPlayAlong);
-  els.focusBpmGroup.style.display = disp(isPlayAlong);
-  // Always hide start button — detect auto-starts mic, play along doesn't need it
-  els.startBtn.style.display = 'none';
-  els.focusStartBtn.style.display = 'none';
-  els.loopBtn.style.display = disp(isPlayAlong);
-  els.focusLoopBtn.style.display = disp(isPlayAlong);
-  els.noteNameBtn.style.display = disp(isPlayAlong);
-  els.focusNoteNameBtn.style.display = disp(isPlayAlong);
-
-  enablePlayBtns(isPlayAlong);
-
-  if (!isPlayAlong && !state.isListening) {
-    startListening();
-  } else if (isPlayAlong && state.isListening) {
-    stopListening();
-  }
+  enablePlayBtns(true);
+  if (!state.isListening) startListening();
 }
 
 function showScaleComplete() {
@@ -1857,12 +1674,9 @@ function addBpmStepButton(btn, delta) {
 function initBpmScrub() {
   addBpmStepButton(els.bpmDec, -1);
   addBpmStepButton(els.bpmInc, +1);
-  addBpmStepButton(els.focusBpmDec, -1);
-  addBpmStepButton(els.focusBpmInc, +1);
 
   [
     { scrub: els.bpmScrub, val: els.bpmScrubVal },
-    { scrub: els.focusBpmScrub, val: els.focusBpmScrubVal },
   ].forEach(({ scrub, val }) => {
     if (!scrub) return;
 
@@ -1951,50 +1765,11 @@ function init() {
     }
   });
 
-  els.loadBtn.addEventListener('click', () => els.fileInput.click());
-  els.fileInput.addEventListener('change', handleFileLoad);
-
-  els.partSelect.addEventListener('change', (e) => {
-    selectPart(parseInt(e.target.value));
-    if (state.scoreManager.scoreType === 'midi') renderMidiNoteList();
-  });
-
-  els.scrollModeSelect.addEventListener('change', (e) => {
-    state.scrollMode = e.target.value;
-    state._scrollMinTarget = els.scoreContainer.scrollTop;
-    // Cancel any in-progress continuous scroll animation
-    if (state._scrollRafId) {
-      cancelAnimationFrame(state._scrollRafId);
-      state._scrollRafId = null;
-    }
-  });
-
-  els.modeSelect.addEventListener('change', (e) => {
-    state.mode = e.target.value;
-    if (state.referenceTone) {
-      state.referenceTone.setMode(state.mode);
-      // Restart appropriate mode
-      const note = state.activeNotes[state.currentNoteIndex];
-      if (note && state.isListening) {
-        state.referenceTone.setTargetNote(note.frequency);
-        if (state.mode === 'drone') {
-          state.referenceTone.startDrone(note.frequency);
-        }
-      }
-    }
-  });
-
   els.playBtn.addEventListener('click', togglePlayback);
-  els.startBtn.addEventListener('click', toggleListening);
-  els.focusPlayBtn.addEventListener('click', togglePlayback);
-  els.focusStartBtn.addEventListener('click', toggleListening);
-  els.collapseBtn.addEventListener('click', toggleFocus);
-  els.expandBtn.addEventListener('click', toggleFocus);
 
   function toggleLoop() {
     state.loopEnabled = !state.loopEnabled;
     els.loopBtn.classList.toggle('active', state.loopEnabled);
-    els.focusLoopBtn.classList.toggle('active', state.loopEnabled);
     if (state.scorePlayer) state.scorePlayer.shouldLoop = state.loopEnabled;
     if (state.view === 'scales' && state.activeNotes.length) {
       if (state.isPlaying) stopPlayback();
@@ -2002,68 +1777,50 @@ function init() {
     }
   }
   els.loopBtn.addEventListener('click', toggleLoop);
-  els.focusLoopBtn.addEventListener('click', toggleLoop);
 
   function toggleNoteNames() {
     state.showNoteNames = !state.showNoteNames;
     els.noteNameBtn.classList.toggle('active', state.showNoteNames);
-    els.focusNoteNameBtn.classList.toggle('active', state.showNoteNames);
     if (!state.showNoteNames) hideNoteNameOverlay();
     else updateScaleHighlight();
   }
   els.noteNameBtn.addEventListener('click', toggleNoteNames);
-  els.focusNoteNameBtn.addEventListener('click', toggleNoteNames);
 
   initBpmScrub();
-
-  els.prevNote.addEventListener('click', () => { stopPlayback(); advanceNote(-1); });
-  els.nextNote.addEventListener('click', () => { stopPlayback(); advanceNote(1); });
-  els.prevMeasure.addEventListener('click', () => {
-    stopPlayback();
-    const m = Math.max(1, state.currentMeasure - 1);
-    jumpToMeasure(m);
-  });
-  els.nextMeasure.addEventListener('click', () => {
-    stopPlayback();
-    const m = Math.min(state.scoreManager.getMeasureCount(), state.currentMeasure + 1);
-    jumpToMeasure(m);
-  });
 
   els.scoreContainer.addEventListener('click', handleScoreClick);
 
   // Scale mode event listeners
   populateScaleKeyButtons();
   populateScaleTypeButtons();
-  els.viewTabs.forEach(tab => {
-    tab.addEventListener('click', () => switchView(tab.dataset.view));
-  });
-  els.submodePlayAlong.addEventListener('click', () => {
-    if (state.isPlaying) stopPlayback();
-    state.scaleSubMode = 'playAlong';
-    updateScaleSubModeUI();
-  });
-  els.submodeDetect.addEventListener('click', () => {
-    if (state.isPlaying) stopPlayback();
-    state.scaleSubMode = 'detect';
-    updateScaleSubModeUI();
-  });
+  const octBtn = document.getElementById('oct-btn');
 
-  document.querySelectorAll('.octave-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.scaleOctaves = parseInt(btn.dataset.octaves);
-      document.querySelectorAll('.octave-btn').forEach(b => b.classList.toggle('active', b === btn));
-      if (state.isPlaying) stopPlayback();
-      if (state.isListening) stopListening();
-      updateScaleNotes();
-    });
+  function setOctaves(n) {
+    state.scaleOctaves = n;
+    octBtn.textContent = n === 1 ? '1 Octave' : `${n} Octaves`;
+    if (state.isPlaying) stopPlayback();
+    updateScaleNotes();
+  }
+
+  setOctaves(state.scaleOctaves);
+
+  octBtn.addEventListener('click', () => {
+    setOctaves((state.scaleOctaves % 4) + 1);
   });
 
   updateTargetDisplay();
 
-  // Start in focus (full-screen) mode
-  document.body.classList.add('focused');
+  // Panel tab switching
+  document.querySelectorAll('.panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const panel = tab.dataset.panel;
+      els.topPanel.dataset.state = panel;
+      document.querySelectorAll('.panel-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.panel === panel)
+      );
+    });
+  });
 
-  // Start on Scales tab
   switchView('scales');
 
   // Keyboard shortcuts
@@ -2085,9 +1842,6 @@ function init() {
     } else if (e.key === 'p' || e.key === 'P') {
       e.preventDefault();
       togglePlayback();
-    } else if (e.key === 'f' || e.key === 'F') {
-      e.preventDefault();
-      toggleFocus();
     }
   });
 }
