@@ -1,6 +1,6 @@
 // Note math utilities for frequency/note conversion
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 const A4_FREQ = 440;
 const A4_MIDI = 69;
 

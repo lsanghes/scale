@@ -16,6 +16,7 @@ export class ScorePlayer {
     this.onProgress = null;  // callback(currentBeat) each animation frame
     this.onEnded = null;     // callback() when playback finishes
     this.onLoopRestart = null; // callback() when loop count-in begins
+    this.countInEnabled = true; // whether to play 4 clicks before each repeat
     this.shouldLoop = false; // whether to loop after completion
     this.loopDelayMs = 0;    // delay before looping
     this._loopTimeout = null; // timeout for loop restart (separate from note timeouts)
@@ -159,14 +160,14 @@ export class ScorePlayer {
 
     // Done when past the last note's end
     const last = notes[notes.length - 1];
-    if (last && currentBeat >= last.startBeat + last.duration + 0.5) {
+    if (last && currentBeat >= last.startBeat + last.duration) {
       if (this.shouldLoop) {
         // Schedule loop restart after delay (separate timeout, not cleared by stop)
         this.isPlaying = false;
         this._loopTimeout = setTimeout(() => {
           if (this.shouldLoop) {
             if (this.onLoopRestart) this.onLoopRestart();
-            this.countIn(this._notes, (60000 / this._msPerBeat), 0, this._onCountBeat);
+            this.play(this._notes, (60000 / this._msPerBeat), 0);
           }
         }, this.loopDelayMs);
       } else {

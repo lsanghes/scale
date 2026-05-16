@@ -44,12 +44,16 @@
         <button class="octave-btn" data-octaves="1">1 Oct</button>
         <button class="octave-btn" data-octaves="2">2 Oct</button>
         <button class="octave-btn active" data-octaves="3">3 Oct</button>
+        <button class="octave-btn" data-octaves="4">4 Oct</button>
       </div>
     </div>
   </div>
 
-  <div id="score-container">
-    <p>Load a MusicXML or MIDI file to see the score, or just start for free play.</p>
+  <div id="score-title"></div>
+  <div id="score-wrapper">
+    <div id="score-container">
+      <p>Load a MusicXML or MIDI file to see the score, or just start for free play.</p>
+    </div>
   </div>
   <div id="note-name-overlay" class="note-name-overlay" style="display:none"></div>
   <div id="midi-note-list"></div>
@@ -98,20 +102,9 @@
 
   <div class="controls">
     <button id="play-btn" disabled>&#9654; Play</button>
-    <label class="bpm-label">BPM <input type="number" id="bpm-input" value="60" min="20" max="400"></label>
-    <div class="bpm-presets">
-      <button class="bpm-preset" data-bpm="40">40</button>
-      <button class="bpm-preset" data-bpm="50">50</button>
-      <button class="bpm-preset" data-bpm="60">60</button>
-      <button class="bpm-preset" data-bpm="70">70</button>
-      <button class="bpm-preset" data-bpm="80">80</button>
-      <button class="bpm-preset" data-bpm="90">90</button>
-      <button class="bpm-preset" data-bpm="100">100</button>
-      <button class="bpm-preset" data-bpm="110">110</button>
-      <button class="bpm-preset" data-bpm="120">120</button>
-      <button class="bpm-preset" data-bpm="140">140</button>
-      <button class="bpm-preset" data-bpm="160">160</button>
-    </div>
+    <div class="bpm-group" id="bpm-group"><button class="bpm-step" id="bpm-dec" title="BPM -1">−</button><div class="bpm-scrub" id="bpm-scrub" title="Drag to change BPM · tap to type"><span class="bpm-scrub-label">BPM</span><span class="bpm-scrub-val" id="bpm-scrub-val">120</span></div><button class="bpm-step" id="bpm-inc" title="BPM +1">+</button></div>
+    <button id="loop-btn" class="active" title="Toggle loop">⟳</button>
+    <button id="note-name-btn" class="active" title="Toggle note names">♩C</button>
     <button id="start-btn">Start</button>
   </div>
 
@@ -126,21 +119,9 @@
   <div id="focus-bar">
     <button id="expand-btn" title="Exit focus view">&#x2715;</button>
     <button id="focus-play-btn" disabled>&#9654; Play</button>
-    <label class="bpm-label">BPM <input type="number" id="focus-bpm-input" value="60" min="20" max="400"></label>
-    <div class="bpm-presets">
-      <button class="bpm-preset" data-bpm="40">40</button>
-      <button class="bpm-preset" data-bpm="50">50</button>
-      <button class="bpm-preset" data-bpm="60">60</button>
-      <button class="bpm-preset" data-bpm="70">70</button>
-      <button class="bpm-preset" data-bpm="80">80</button>
-      <button class="bpm-preset" data-bpm="90">90</button>
-      <button class="bpm-preset" data-bpm="100">100</button>
-      <button class="bpm-preset" data-bpm="120">120</button>
-      <button class="bpm-preset" data-bpm="140">140</button>
-      <button class="bpm-preset" data-bpm="160">160</button>
-      <button class="bpm-preset" data-bpm="180">180</button>
-      <button class="bpm-preset" data-bpm="200">200</button>
-    </div>
+    <div class="bpm-group" id="focus-bpm-group"><button class="bpm-step" id="focus-bpm-dec" title="BPM -1">−</button><div class="bpm-scrub" id="focus-bpm-scrub" title="Drag to change BPM · tap to type"><span class="bpm-scrub-label">BPM</span><span class="bpm-scrub-val" id="focus-bpm-scrub-val">120</span></div><button class="bpm-step" id="focus-bpm-inc" title="BPM +1">+</button></div>
+    <button id="focus-loop-btn" class="active" title="Toggle loop">⟳</button>
+    <button id="focus-note-name-btn" class="active" title="Toggle note names">♩C</button>
     <button id="focus-start-btn">Start</button>
   </div>
 
