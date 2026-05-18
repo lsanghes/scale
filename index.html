@@ -21,34 +21,36 @@
       </div>
     </div>
     <div id="panel-intonation">
-      <div class="note-display">
-        <div class="note-box detected">
-          <label>Detected</label>
-          <div class="note-name" id="detected-note">-</div>
-          <div class="note-freq" id="detected-freq"></div>
+      <div class="inton-left">
+        <div class="inton-stat-group">
+          <span class="inton-stat-val inton-note" id="detected-note">-</span>
+          <span class="inton-stat-label">DETECTED</span>
         </div>
-        <div class="note-box target">
-          <label>Target</label>
-          <div class="note-name" id="target-note">-</div>
+        <div class="inton-stat-group">
+          <span class="inton-stat-val inton-target-val" id="target-note">-</span>
+          <span class="inton-stat-label">TARGET</span>
+        </div>
+        <div class="inton-stat-group">
+          <span class="inton-stat-val" id="detected-freq">—</span>
+          <span class="inton-stat-label">HZ</span>
+        </div>
+        <div class="inton-stat-group">
+          <span class="inton-stat-val" id="cents-value">—</span>
+          <span class="inton-stat-label">CENTS</span>
         </div>
       </div>
-      <div class="cents-meter" id="cents-meter">
-        <div class="cents-track">
-          <div class="cents-center"></div>
-          <div class="cents-indicator" id="cents-indicator"></div>
+      <div class="pitch-graph-wrap">
+        <canvas id="pitch-history-canvas"></canvas>
+        <div class="pitch-axis-labels">
+          <span>-50</span>
+          <span>+50</span>
         </div>
       </div>
-      <div class="cents-labels">
-        <span>-50¢</span>
-        <span>0</span>
-        <span>+50¢</span>
-      </div>
-      <div class="cents-value" id="cents-value"></div>
     </div>
   </div>
 
-  <div id="score-title"></div>
   <div id="score-wrapper">
+    <div id="score-title"></div>
     <div id="score-container"></div>
   </div>
   <div id="note-name-overlay" class="note-name-overlay" style="display:none"></div>
@@ -57,6 +59,7 @@
     <button id="play-btn" disabled>&#9654; Play</button>
     <div class="bpm-group" id="bpm-group"><button class="bpm-step" id="bpm-dec" title="BPM -1">−</button><div class="bpm-scrub" id="bpm-scrub" title="Drag to change BPM · tap to type"><span class="bpm-scrub-label">BPM</span><span class="bpm-scrub-val" id="bpm-scrub-val">120</span></div><button class="bpm-step" id="bpm-inc" title="BPM +1">+</button></div>
     <button id="loop-btn" class="active" title="Toggle loop">⟳</button>
+    <button id="count-in-btn" class="active" title="Toggle count-in">♩4</button>
     <button id="note-name-btn" class="active" title="Toggle note names">♩C</button>
   </div>
 

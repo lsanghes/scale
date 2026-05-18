@@ -1,4 +1,4 @@
-// Reference tone engine — cello sample playback via soundfont-player
+// Reference tone engine — cello sample playback via soundfont-player (FluidR3_GM)
 
 import { nearestNoteNumber } from './notemath.js';
 
@@ -15,11 +15,10 @@ export class ReferenceToneEngine {
     this._loading = null;
   }
 
-  /** Load the cello instrument samples from CDN. Call once before playing. */
   async init(destination) {
     if (this._loading) return this._loading;
     this._loading = Soundfont.instrument(this.ctx, 'cello', {
-      soundfont: 'MusyngKite',
+      soundfont: 'FluidR3_GM',
       destination: destination || this.ctx.destination,
     }).then(player => {
       this.player = player;
@@ -36,7 +35,6 @@ export class ReferenceToneEngine {
     const prevFreq = this.targetFreq;
     this.targetFreq = frequency;
     if (this.mode === 'simultaneous' && this.activeOscs.length) {
-      // Only restart if the MIDI note actually changed
       const prevMidi = prevFreq ? nearestNoteNumber(prevFreq) : null;
       const newMidi = nearestNoteNumber(frequency);
       if (prevMidi !== newMidi) {
@@ -60,7 +58,6 @@ export class ReferenceToneEngine {
     const freq = frequency || this.targetFreq;
     if (!freq || !this.player) return;
 
-    // Debounce: don't re-ping the same note within 500ms
     const noteRound = Math.round(12 * Math.log2(freq / 440));
     const now = performance.now();
     if (noteRound === this.lastPingNote && now - this.lastPingTime < 500) return;
@@ -87,12 +84,12 @@ export class ReferenceToneEngine {
       gain: gain,
     });
     this.activeNode = node;
-    this.activeOscs = [1]; // sentinel so .length > 0
+    this.activeOscs = [1];
   }
 
   stopAll() {
     if (this.activeNode) {
-      try { this.activeNode.stop(); } catch (e) { /* already stopped */ }
+      try { this.activeNode.stop(); } catch (e) {}
       this.activeNode = null;
     }
     if (this.player) {

@@ -1,0 +1,15 @@
+{
+  "appId": "com.playable.intonation",
+  "appName": "Playable",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "automatic",
+    "allowsLinkPreview": false,
+    "backgroundColor": "#1a1a2e"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true
+    }
+  }
+}

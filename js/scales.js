@@ -248,7 +248,7 @@ function generateChromatic(root, octaves) {
 
   // Ascending root → root+octaves*12 (inclusive), sharps
   for (let s = 0; s <= octaves * 12; s++) {
-    const pc = s % 12;
+    const pc = (root + s) % 12;
     const row = Math.min(Math.floor(s / 12) + 1, octaves);
     const note = makeNote(root + s, root, entries.length, row);
     note.step  = CHROMATIC_SHARP_STEPS[pc];
@@ -258,7 +258,7 @@ function generateChromatic(root, octaves) {
 
   // Descending root+octaves*12-1 → root+1 (exclusive top, ends on flat 2nd), flats
   for (let s = octaves * 12 - 1; s >= 1; s--) {
-    const pc = s % 12;
+    const pc = (root + s) % 12;
     const row = octaves + (octaves - Math.floor(s / 12));
     const note = makeNote(root + s, root, entries.length, row);
     note.step  = CHROMATIC_FLAT_STEPS[pc];

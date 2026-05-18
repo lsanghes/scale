@@ -80,7 +80,7 @@ button.active {
 }
 
 #top-panel[data-state="intonation"] #panel-intonation {
-  display: block;
+  display: flex;
 }
 
 #panel-selection {
@@ -88,8 +88,7 @@ button.active {
 }
 
 #panel-intonation {
-  padding: 20px 20px 16px;
-  text-align: center;
+  padding: 10px 16px 0 16px;
 }
 
 /* Scale mode */
@@ -189,6 +188,11 @@ button.active {
   position: relative;
 }
 
+.scale-type-buttons button.arp-btn[data-type="ALL"] {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
 .scale-type-buttons button.arp-btn::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -240,10 +244,10 @@ button.active {
 }
 
 .oct-btn {
-  padding: 8px 16px;
+  padding: 6px 18px;
   font-size: 0.85rem;
   border: 1px solid #1a5276;
-  border-radius: 6px;
+  border-radius: 999px;
   background: #0f3460;
   color: #e0e0e0;
   cursor: pointer;
@@ -252,8 +256,8 @@ button.active {
 }
 
 .oct-btn:hover {
-  border-color: #2980b9;
-  background: #1a5276;
+  border-color: #c0384f;
+  background: #c0384f;
 }
 
 #scale-note-display {
@@ -363,15 +367,14 @@ button.active {
 #score-wrapper {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   position: relative;
 }
 
 #score-container {
   background: #fff;
   color: #333;
-  height: 100%;
-  overflow-y: auto;
+  overflow-y: visible;
   margin: 0;
   cursor: pointer;
 }
@@ -390,117 +393,71 @@ button.active {
   color: #666;
 }
 
-.note-display {
+/* Intonation panel — Tunable-style */
+#panel-intonation {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.inton-left {
+  flex: 1;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 40px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  justify-content: space-evenly;
+  padding: 10px 12px 10px 0;
+  gap: 6px;
 }
 
-.note-box {
-  text-align: center;
+.inton-stat-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
-.note-box label {
-  display: block;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: #888;
-  margin-bottom: 4px;
-  letter-spacing: 1px;
+.inton-stat-val {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #4db6ac;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.note-box .note-name {
-  font-size: 3rem;
-  font-weight: bold;
-  min-width: 100px;
+.inton-note {
+  font-size: 2rem;
 }
 
-.note-box .note-freq {
-  font-size: 0.8rem;
-  color: #888;
-  min-height: 1.2em;
-}
-
-.detected .note-name {
-  color: #4fc3f7;
-}
-
-.target .note-name {
+.inton-target-val {
   color: #e94560;
 }
 
-/* Cents meter */
-.cents-meter {
-  position: relative;
-  height: 40px;
-  max-width: 500px;
-  margin: 0 auto 10px;
-  background: #0f3460;
-  border-radius: 20px;
-  overflow: hidden;
+.inton-stat-label {
+  font-size: 0.58rem;
+  color: #888;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
 }
 
-.cents-track {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.pitch-graph-wrap {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
 }
 
-.cents-center {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  background: #4fc3f7;
-  transform: translateX(-50%);
-  z-index: 2;
+#pitch-history-canvas {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 180px;
+  border-radius: 6px 6px 0 0;
 }
 
-.cents-indicator {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  background: #e94560;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: left 0.08s ease-out, background 0.3s;
-  z-index: 3;
-  box-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
-}
-
-.cents-meter.in-tune .cents-indicator {
-  background: #4caf50;
-  box-shadow: 0 0 20px rgba(76, 175, 80, 0.7);
-}
-
-.cents-meter.close .cents-indicator {
-  background: #ff9800;
-  box-shadow: 0 0 15px rgba(255, 152, 0, 0.5);
-}
-
-.cents-labels {
+.pitch-axis-labels {
   display: flex;
   justify-content: space-between;
-  max-width: 500px;
-  margin: 0 auto;
   font-size: 0.7rem;
-  color: #666;
-  padding: 0 10px;
-}
-
-.cents-value {
-  text-align: center;
-  font-size: 1.2rem;
-  margin-top: 8px;
-  min-height: 1.5em;
-  font-variant-numeric: tabular-nums;
+  color: #888;
+  padding: 3px 4px 8px;
 }
 
 /* Controls */
@@ -533,14 +490,28 @@ button.active {
 
 #play-btn {
   font-size: 1rem;
-  padding: 10px 24px;
-  border-radius: 30px;
+  padding: 0 24px;
+  height: 44px;
+  border-radius: 22px;
   min-width: 100px;
+  background: #2e7d32;
+  border-color: #2e7d32;
+  color: #fff;
+}
+
+#play-btn:hover {
+  background: #388e3c;
+  border-color: #388e3c;
 }
 
 #play-btn.active {
-  background: #4caf50;
-  border-color: #4caf50;
+  background: #c62828;
+  border-color: #c62828;
+}
+
+#play-btn.active:hover {
+  background: #d32f2f;
+  border-color: #d32f2f;
 }
 
 .bpm-group {
@@ -612,35 +583,29 @@ button.active {
   line-height: 1;
 }
 
-#loop-btn {
-  font-size: 1.4rem;
+#loop-btn,
+#count-in-btn,
+#note-name-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 4px;
-  width: 32px;
-  height: 28px;
-  line-height: 28px;
-  text-align: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-#note-name-btn {
-  font-size: 0.85rem;
-  padding: 0;
-  border-radius: 4px;
-  width: 32px;
-  height: 28px;
-  line-height: 28px;
-  text-align: center;
-}
+#loop-btn { font-size: 2.5rem; line-height: 1; padding-left: 5px; padding-bottom: 7px; }
+#count-in-btn { font-size: 1.2rem; }
+#note-name-btn { font-size: 1.2rem; }
 
 /* Responsive */
-@media (max-width: 600px) {
-  .note-display {
-    gap: 20px;
+@media (max-width: 480px) {
+  .inton-note {
+    font-size: 1.5rem;
   }
-  .note-box .note-name {
-    font-size: 2rem;
+  .inton-stat-val {
+    font-size: 1rem;
   }
 }

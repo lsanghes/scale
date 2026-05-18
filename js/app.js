@@ -13,6 +13,33 @@ import { ScoreManager } from './score.js';
 import { ScorePlayer } from './playback.js';
 import { generateScaleNotes, SCALE_TYPES, ARPEGGIO_TYPES, ARPEGGIO_DEGREES, NOTE_NAMES, SHARP_KEY_NAMES, FLAT_KEY_NAMES, SHARP_PREF_TYPES } from './scales.js';
 
+const PREFS_KEY = 'playable_prefs';
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      scaleKey: state.scaleKey,
+      scaleType: state.scaleType,
+      scaleIsArpeggio: state.scaleIsArpeggio,
+      scaleOctaves: state.scaleOctaves,
+      bpm: state.bpm,
+      loopEnabled: state.loopEnabled,
+      countInEnabled: state.countInEnabled,
+      showNoteNames: state.showNoteNames,
+      topPanel: state.topPanel,
+    }));
+  } catch {}
+}
+
+const _prefs = loadPrefs();
+
 const state = {
   audioContext: null,
   pitchDetector: null,
@@ -26,17 +53,18 @@ const state = {
   isPlaying: false,
   mode: 'simultaneous',
   scrollMode: 'continuous', // 'jump' | 'continuous'
-  bpm: 120,
-  loopEnabled: true,
-  showNoteNames: true,
+  bpm: _prefs.bpm ?? 120,
+  loopEnabled: _prefs.loopEnabled ?? true,
+  countInEnabled: _prefs.countInEnabled ?? true,
+  showNoteNames: _prefs.showNoteNames ?? true,
   scoreLoaded: false,
   activeNotes: [], // notes for the selected part
-  inTuneSince: 0,  // timestamp when player was first in-tune on current note
   view: 'score',           // 'score' | 'scales'
-  scaleKey: 0,
-  scaleType: 'Major',
-  scaleIsArpeggio: false,
-  scaleOctaves: 3,
+  scaleKey: _prefs.scaleKey ?? 0,
+  scaleType: _prefs.scaleType ?? 'Major',
+  scaleIsArpeggio: _prefs.scaleIsArpeggio ?? false,
+  scaleOctaves: _prefs.scaleOctaves ?? 3,
+  topPanel: _prefs.topPanel ?? 'selection',
   // continuous scroll state
   _scrollTarget: 0,
   _scrollCurrent: 0,
@@ -46,6 +74,7 @@ const state = {
   _playbackScrollEnabled: true,
   _lastPlaybackMeasure: null,
   _repeatScrollStartMeasure: null,
+  pitchHistory: [],
 };
 
 // DOM elements
@@ -56,13 +85,13 @@ function initDOM() {
   els.detectedFreq = document.getElementById('detected-freq');
   els.targetNote = document.getElementById('target-note');
   els.centsValue = document.getElementById('cents-value');
-  els.centsIndicator = document.getElementById('cents-indicator');
-  els.centsMeter = document.getElementById('cents-meter');
+  els.pitchCanvas = document.getElementById('pitch-history-canvas');
   els.scoreContainer = document.getElementById('score-container');
   els.scoreWrapper = document.getElementById('score-wrapper');
   els.scoreTitle = document.getElementById('score-title');
   els.playBtn = document.getElementById('play-btn');
   els.loopBtn = document.getElementById('loop-btn');
+  els.countInBtn = document.getElementById('count-in-btn');
   els.noteNameBtn = document.getElementById('note-name-btn');
   els.bpmGroup = document.getElementById('bpm-group');
   els.bpmScrub = document.getElementById('bpm-scrub');
@@ -164,6 +193,7 @@ function setBpm(val) {
   state.bpm = bpm;
   els.bpmScrubVal.textContent = bpm;
   if (state.scorePlayer?.isPlaying) state.scorePlayer.changeBpm(bpm);
+  savePrefs();
 }
 
 function ensureAudioContext() {
@@ -283,7 +313,6 @@ function advanceNote(delta) {
     state._scrollMinTarget = 0;
     state.currentNoteIndex = newIdx;
     state.currentMeasure = state.activeNotes[newIdx].measure;
-    state.inTuneSince = 0;
     updateTargetDisplay();
     if (state.view === 'scales') {
       updateScaleHighlight();
@@ -323,15 +352,15 @@ function scrollScoreToCursor(cursorEl, note) {
       return;
     }
 
-    const container = els.scoreContainer;
-    const containerRect = container.getBoundingClientRect();
+    const scroller = els.scoreWrapper;
+    const scrollerRect = scroller.getBoundingClientRect();
     let cursorRect = null;
     let relTop = null;
 
     if (cursorEl) {
       cursorRect = cursorEl.getBoundingClientRect();
       if (cursorRect.height || cursorRect.width) {
-        relTop = cursorRect.top - containerRect.top + container.scrollTop;
+        relTop = cursorRect.top - scrollerRect.top + scroller.scrollTop;
       }
     }
 
@@ -344,13 +373,13 @@ function scrollScoreToCursor(cursorEl, note) {
 
     if (relTop === null) return;
 
-    const baseTarget = Math.max(0, relTop - containerRect.height / 3);
+    const baseTarget = Math.max(0, relTop - scrollerRect.height / 3);
 
     if (state.scrollMode === 'continuous') {
-      setContinuousScrollTarget(getContinuousScrollTarget(note, containerRect, baseTarget, cursorRect, note ? note.startBeat : null));
+      setContinuousScrollTarget(getContinuousScrollTarget(note, scrollerRect, baseTarget, cursorRect, note ? note.startBeat : null));
       startContinuousScroll();
     } else {
-      container.scrollTo({ top: baseTarget, behavior: 'smooth' });
+      scroller.scrollTo({ top: baseTarget, behavior: 'smooth' });
     }
   } catch (_) {}
 }
@@ -363,7 +392,7 @@ function setContinuousScrollTarget(target, allowBackward = false) {
     return;
   }
 
-  const floor = Math.max(state._scrollMinTarget, els.scoreContainer.scrollTop);
+  const floor = Math.max(state._scrollMinTarget, els.scoreWrapper.scrollTop);
   const nextTarget = Math.max(clampedTarget, floor);
   state._scrollMinTarget = nextTarget;
   state._scrollTarget = nextTarget;
@@ -388,7 +417,7 @@ function getContinuousScrollTarget(note, containerRect, baseTarget, cursorRect, 
   const systemLayout = note ? state.scoreManager.getSystemLayoutForMeasure(note.measure) : null;
   if (!systemLayout) return baseTarget;
 
-  const container = els.scoreContainer;
+  const container = els.scoreWrapper;
   const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
 
   const systemEntry = getScrollTimelineEntry(note, currentBeat);
@@ -416,19 +445,18 @@ function getContinuousScrollTarget(note, containerRect, baseTarget, cursorRect, 
 
 function startContinuousScroll() {
   if (state._scrollRafId) return; // already running
-  state._scrollCurrent = els.scoreContainer.scrollTop;
+  state._scrollCurrent = els.scoreWrapper.scrollTop;
 
   function tick() {
     const diff = state._scrollTarget - state._scrollCurrent;
     if (Math.abs(diff) < 0.5) {
-      els.scoreContainer.scrollTop = state._scrollTarget;
+      els.scoreWrapper.scrollTop = state._scrollTarget;
       state._scrollCurrent = state._scrollTarget;
       state._scrollRafId = null;
       return;
     }
-    // Ease toward target: move 8% of the remaining distance each frame
     state._scrollCurrent += diff * 0.08;
-    els.scoreContainer.scrollTop = state._scrollCurrent;
+    els.scoreWrapper.scrollTop = state._scrollCurrent;
     state._scrollRafId = requestAnimationFrame(tick);
   }
 
@@ -511,8 +539,8 @@ function handleScoreClick(event) {
   const containerRect = container.getBoundingClientRect();
 
   // Click position in SVG pixel space (accounting for container scroll)
-  const svgX = event.clientX - containerRect.left + container.scrollLeft;
-  const svgY = event.clientY - containerRect.top + container.scrollTop;
+  const svgX = event.clientX - containerRect.left;
+  const svgY = event.clientY - containerRect.top + els.scoreWrapper.scrollTop;
 
   const noteIdx = getNoteIndexAtSvgPx(svgX, svgY);
   if (noteIdx !== null) {
@@ -520,7 +548,6 @@ function handleScoreClick(event) {
     if (wasPlaying) stopPlayback();
     state.currentNoteIndex = noteIdx;
     state.currentMeasure = state.activeNotes[noteIdx]?.measure ?? state.currentMeasure;
-    state.inTuneSince = 0;
     updateTargetDisplay();
     if (state.view === 'scales') updateScaleHighlight();
     if (wasPlaying) startPlayback();
@@ -539,15 +566,13 @@ async function togglePlayback() {
 async function startPlayback() {
   if (state.view !== 'scales' && (!state.scoreLoaded || !state.activeNotes.length)) return;
   if (state.view === 'scales' && !state.activeNotes.length) return;
-
-  // Mutually exclusive with mic listening
-  if (state.isListening) stopListening();
+  if (state.isPlaying) return;
+  state.isPlaying = true;
+  setPlayBtnState(true, false);
 
   const ctx = ensureAudioContext();
   // Must await resume — context can be suspended on Safari/iOS or after inactivity
   await ctx.resume();
-
-  setPlayBtnState(true, false);
 
   try {
     if (!state.referenceTone) {
@@ -565,14 +590,16 @@ async function startPlayback() {
     }
 
     const bpm = getBpm();
-    state.isPlaying = true;
     setPlayBtnState(false, true);
+
+    // Stop any droning reference tone — playing both simultaneously causes phase beating
+    if (state.referenceTone) state.referenceTone.stopAll();
 
     if (state.view === 'scales') {
       // Scale mode: simple note highlighting with looping
       state.scorePlayer.shouldLoop = state.loopEnabled;
       state.scorePlayer.loopDelayMs = 0;
-      state.scorePlayer.countInEnabled = true;
+      state.scorePlayer.countInEnabled = state.countInEnabled;
       state.scorePlayer.onNoteIndex = (idx) => {
         const changed = idx !== state.currentNoteIndex;
         if (changed) {
@@ -608,7 +635,7 @@ async function startPlayback() {
       const repeatScrollStartMeasure = hasBackwardRepeatJump
         ? state.activeNotes[backwardRepeatJumpIndex].measure
         : null;
-      state._scrollMinTarget = els.scoreContainer.scrollTop;
+      state._scrollMinTarget = els.scoreWrapper.scrollTop;
       state._lastPlaybackMeasure = state.activeNotes[state.currentNoteIndex]?.measure ?? null;
       state._repeatScrollStartMeasure = repeatScrollStartMeasure;
       state._playbackScrollEnabled = state.currentNoteIndex > 0 || !hasBackwardRepeatJump;
@@ -626,8 +653,8 @@ async function startPlayback() {
             nextMeasure >= state._repeatScrollStartMeasure
           ) {
             state._playbackScrollEnabled = false;
-            state._scrollMinTarget = els.scoreContainer.scrollTop;
-            state._scrollTarget = els.scoreContainer.scrollTop;
+            state._scrollMinTarget = els.scoreWrapper.scrollTop;
+            state._scrollTarget = els.scoreWrapper.scrollTop;
           }
 
           if (
@@ -637,7 +664,7 @@ async function startPlayback() {
             nextMeasure < state._lastPlaybackMeasure
           ) {
             state._playbackScrollEnabled = true;
-            state._scrollMinTarget = els.scoreContainer.scrollTop;
+            state._scrollMinTarget = els.scoreWrapper.scrollTop;
           }
 
           state.currentNoteIndex = idx;
@@ -664,15 +691,20 @@ async function startPlayback() {
       };
     }
 
-    state.scorePlayer.countIn(state.activeNotes, bpm, state.currentNoteIndex, (beat) => {
+    if (state.countInEnabled) {
+      state.scorePlayer.countIn(state.activeNotes, bpm, state.currentNoteIndex, (beat) => {
+        setPlayBtnState(false, true);
+        els.playBtn.textContent = beat;
+        if (beat === 1) {
+          setTimeout(() => {
+            els.playBtn.textContent = '⏹ Stop';
+          }, 60000 / bpm);
+        }
+      });
+    } else {
       setPlayBtnState(false, true);
-      els.playBtn.textContent = beat;
-      if (beat === 1) {
-        setTimeout(() => {
-          els.playBtn.textContent = '⏹ Stop';
-        }, 60000 / bpm);
-      }
-    });
+      state.scorePlayer.play(state.activeNotes, bpm, state.currentNoteIndex);
+    }
   } catch (err) {
     console.error('Playback failed:', err);
     alert('Playback failed: ' + err.message);
@@ -696,8 +728,6 @@ function stopPlayback() {
 
 // Mic toggle
 async function startListening() {
-  // Mutually exclusive with playback
-  if (state.isPlaying) stopPlayback();
 
   const ctx = ensureAudioContext();
 
@@ -735,10 +765,123 @@ function stopListening() {
   if (state.pitchDetector) state.pitchDetector.stop();
   if (state.referenceTone) state.referenceTone.stopAll();
   els.detectedNote.textContent = '-';
-  els.detectedFreq.textContent = '';
-  els.centsValue.textContent = '';
-  els.centsIndicator.style.left = '50%';
-  els.centsMeter.className = 'cents-meter';
+  els.detectedFreq.textContent = '—';
+  els.centsValue.textContent = '—';
+  state.pitchHistory = [];
+  drawPitchCanvas();
+}
+
+// Pitch history canvas (Tunable-style vertical graph)
+const MAX_PITCH_HISTORY = 200;
+
+function resizePitchCanvas() {
+  const canvas = els.pitchCanvas;
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  drawPitchCanvas();
+}
+
+function drawPitchCanvas() {
+  const canvas = els.pitchCanvas;
+  if (!canvas || !canvas.width || !canvas.height) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+
+  // White background
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, w, h);
+
+  const halfW = w / 2;
+  const GREEN_CENTS = 10; // ±cents considered in-tune
+  const greenHalf = (GREEN_CENTS / 50) * halfW;
+
+  // Green in-tune band
+  ctx.fillStyle = 'rgba(61, 189, 168, 0.75)';
+  ctx.fillRect(halfW - greenHalf, 0, greenHalf * 2, h);
+
+  // Dynamic red zone: only when current pitch is outside green, from green edge to pitch position
+  const latestForRed = state.pitchHistory.find(v => v !== null && v !== undefined);
+  if (latestForRed !== null && latestForRed !== undefined && Math.abs(latestForRed) > GREEN_CENTS) {
+    const pitchX = halfW + Math.max(-1, Math.min(1, latestForRed / 50)) * (halfW - 0);
+    if (latestForRed > 0) {
+      ctx.fillStyle = 'rgba(220, 50, 80, 0.55)';
+      ctx.fillRect(halfW + greenHalf, 0, pitchX - (halfW + greenHalf), h);
+    } else {
+      ctx.fillStyle = 'rgba(220, 50, 80, 0.55)';
+      ctx.fillRect(pitchX, 0, (halfW - greenHalf) - pitchX, h);
+    }
+  }
+
+  // Center line
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.lineWidth = dpr;
+  ctx.beginPath();
+  ctx.moveTo(halfW, 0);
+  ctx.lineTo(halfW, h);
+  ctx.stroke();
+
+  const history = state.pitchHistory;
+
+  // Find the most recent valid reading for the top arrow
+  const latest = history.find(v => v !== null && v !== undefined);
+
+  // Arrows at top and bottom showing current position
+  // Green arrow = edge of in-tune zone; black arrow = current pitch
+  if (latest !== undefined && latest !== null) {
+    const clampedX = halfW + Math.max(-1, Math.min(1, latest / 50)) * (halfW - 6 * dpr);
+    const edgeX = halfW + Math.sign(latest) * greenHalf;
+    const inTune = Math.abs(latest) <= GREEN_CENTS;
+    const arrowSz = 8 * dpr;
+
+    // Green center arrow (always at center)
+    ctx.fillStyle = '#3dbda8';
+    ctx.beginPath();
+    ctx.moveTo(halfW, arrowSz * 1.5);
+    ctx.lineTo(halfW - arrowSz, 0);
+    ctx.lineTo(halfW + arrowSz, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Black current-pitch arrow
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.moveTo(clampedX, arrowSz * 1.5);
+    ctx.lineTo(clampedX - arrowSz, 0);
+    ctx.lineTo(clampedX + arrowSz, 0);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Waveform line
+  if (history.length < 2) return;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2 * dpr;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  let inPath = false;
+  for (let i = 0; i < history.length; i++) {
+    const v = history[i];
+    const y = (i / MAX_PITCH_HISTORY) * h;
+    if (v === null || v === undefined) {
+      inPath = false;
+      continue;
+    }
+    const x = halfW + Math.max(-1, Math.min(1, v / 50)) * (halfW - 6 * dpr);
+    if (!inPath) {
+      ctx.moveTo(x, y);
+      inPath = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
 }
 
 // Main loop
@@ -756,71 +899,17 @@ function mainLoop() {
 
     // Update detected display
     els.detectedNote.textContent = noteName;
-    els.detectedFreq.textContent = `${frequency.toFixed(1)} Hz`;
-    els.centsValue.textContent = `${cents >= 0 ? '+' : ''}${cents.toFixed(1)}¢`;
-    // Cents meter: map -50..+50 to 0%..100%
-    const pct = Math.max(0, Math.min(100, (cents + 50) * (100 / 100)));
-    els.centsIndicator.style.left = `${pct}%`;
+    els.detectedFreq.textContent = frequency.toFixed(1);
+    els.centsValue.textContent = `${cents >= 0 ? '+' : ''}${cents.toFixed(1)}`;
+    state.pitchHistory.unshift(cents);
+    if (state.pitchHistory.length > 200) state.pitchHistory.length = 200;
+    drawPitchCanvas();
 
-    // Color coding
-    const absCents = Math.abs(cents);
-    if (absCents < 5) {
-      els.centsMeter.className = 'cents-meter in-tune';
-    } else if (absCents < 15) {
-      els.centsMeter.className = 'cents-meter close';
-    } else {
-      els.centsMeter.className = 'cents-meter out-of-tune';
-    }
-
-    // Reference tone logic
-    const targetNote = state.activeNotes[state.currentNoteIndex];
-    if (targetNote && state.referenceTone) {
-      const targetCents = centsDifference(frequency, targetNote.frequency);
-
-      if (state.mode === 'simultaneous') {
-        if (!state.referenceTone.activeOscs.length) {
-          state.referenceTone.setTargetNote(targetNote.frequency);
-          state.referenceTone.startSimultaneous();
-        }
-      } else if (state.mode === 'ping') {
-        if (Math.abs(targetCents) < 50) {
-          state.referenceTone.triggerPing(targetNote.frequency);
-        }
-      }
-      // drone mode runs independently
-
-      // Auto-advance: if within 15 cents for 800ms, move to next note
-      if (Math.abs(targetCents) < 15) {
-        if (state.inTuneSince === 0) {
-          state.inTuneSince = performance.now();
-        } else if (performance.now() - state.inTuneSince > 800) {
-          state.inTuneSince = 0;
-          advanceNote(1);
-        }
-      } else {
-        state.inTuneSince = 0;
-      }
-    } else if (!targetNote && state.referenceTone) {
-      // Free play mode — no score loaded
-      if (state.mode === 'simultaneous') {
-        state.referenceTone.setTargetNote(nearestFreq);
-        if (!state.referenceTone.activeOscs.length) {
-          state.referenceTone.startSimultaneous();
-        }
-      } else if (state.mode === 'ping') {
-        state.referenceTone.triggerPing(nearestFreq);
-      } else if (state.mode === 'drone') {
-        // In free play drone, drone the nearest note
-        if (!state.referenceTone.activeOsc ||
-            Math.abs(centsDifference(frequency, state.referenceTone.targetFreq)) > 50) {
-          state.referenceTone.startDrone(nearestFreq);
-        }
-      }
-    }
   } else {
-    // No pitch detected
-    // No pitch detected — simultaneous tone keeps playing until silence
-
+    // No pitch detected — push null to advance the graph scroll
+    state.pitchHistory.unshift(null);
+    if (state.pitchHistory.length > 200) state.pitchHistory.length = 200;
+    drawPitchCanvas();
   }
 
   requestAnimationFrame(mainLoop);
@@ -851,6 +940,7 @@ function populateScaleKeyButtons() {
     btn.classList.toggle('active', state.scaleKey === i);
     btn.addEventListener('click', () => {
       state.scaleKey = i;
+      savePrefs();
       if (state.isPlaying) stopPlayback();
       updateScaleNotes();
       updateScaleKeyButtonStates();
@@ -895,6 +985,7 @@ function populateScaleTypeButtons() {
     btn.addEventListener('click', () => {
       state.scaleType = item.type;
       state.scaleIsArpeggio = item.isArp;
+      savePrefs();
       if (state.isPlaying) stopPlayback();
       updateScaleNotes();
       updateScaleTypeButtonStates();
@@ -919,6 +1010,7 @@ function populateScaleTypeButtons() {
     { label: '4-3 Sus', type: '4-3 Suspension',          isArp: true, tooltip: 'Four-Three Suspension' },
     { label: 'Major',   type: 'Major',                   isArp: true, tooltip: 'Major (I)' },
     { label: 'V7/♭II',  type: 'Dominant 7th of ♭II',    isArp: true, tooltip: 'Dominant Seventh of ♭II' },
+    { label: 'ALL',     type: 'ALL',                     isArp: true, tooltip: 'All Arpeggios in sequence' },
   ];
 
   arpItems.forEach(item => {
@@ -933,6 +1025,7 @@ function populateScaleTypeButtons() {
     btn.addEventListener('click', () => {
       state.scaleType = item.type;
       state.scaleIsArpeggio = item.isArp;
+      savePrefs();
       if (state.isPlaying) stopPlayback();
       updateScaleNotes();
       updateScaleTypeButtonStates();
@@ -961,6 +1054,7 @@ const ARPEGGIO_FULL_NAMES = {
   'Major':           ['Major',                       'I'],
   'Diminished 7th':      ['Diminished Seventh',          '°7'],
   'Dominant 7th of ♭II': null, // title built dynamically in getScaleTitle
+  'ALL': null, // title built dynamically in getScaleTitle
 };
 
 function getScaleTitle() {
@@ -968,6 +1062,9 @@ function getScaleTitle() {
   const keyName = (useSharp ? SHARP_KEY_NAMES : FLAT_KEY_NAMES)[state.scaleKey];
   const octLabel = `${state.scaleOctaves} Octave${state.scaleOctaves > 1 ? 's' : ''}`;
   if (state.scaleIsArpeggio) {
+    if (state.scaleType === 'ALL') {
+      return `${keyName} All Arpeggios - ${octLabel}`;
+    }
     if (state.scaleType === 'Dominant 7th of ♭II') {
       const flatII = FLAT_KEY_NAMES[(state.scaleKey + 1) % 12];
       return `${keyName} Dominant Seventh of ${flatII} Arpeggio - ${octLabel}`;
@@ -1199,8 +1296,42 @@ function generateScaleMusicXML(notes) {
 const SHARP_NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 const FLAT_NOTE_NAMES  = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
 
+// All arpeggio types in the order shown in the UI
+const ALL_ARP_TYPES = [
+  'Minor', '♭VI6', 'Augmented', 'vi6', 'Dominant 7th',
+  'IV6/4', 'iv6/4', '4-3 Suspension', 'Major', 'Dominant 7th of ♭II',
+];
+
+const ALL_ARP_LABELS = {
+  'Minor':               'Minor',
+  '♭VI6':                'Flat Submediant Six',
+  'Augmented':           'Augmented',
+  'vi6':                 'Relative Minor Six',
+  'Dominant 7th':        'Dominant Seventh',
+  'IV6/4':               'Subdominant Six-Four',
+  'iv6/4':               'Minor Subdominant Six-Four',
+  '4-3 Suspension':      'Four-Three Suspension',
+  'Major':               'Major',
+  'Dominant 7th of ♭II': 'Dominant Seventh of ♭II',
+};
+
+function generateAllArpeggioNotes(octaves) {
+  const allNotes = [];
+  for (const type of ALL_ARP_TYPES) {
+    const seg = generateScaleNotes(state.scaleKey, type, true, octaves);
+    seg.forEach((note, idx) => {
+      const n = { ...note, startBeat: allNotes.length };
+      if (idx === 0) n.segmentLabel = ALL_ARP_LABELS[type] ?? type;
+      allNotes.push(n);
+    });
+  }
+  return allNotes;
+}
+
 function updateScaleNotes() {
-  const notes = generateScaleNotes(state.scaleKey, state.scaleType, state.scaleIsArpeggio, state.scaleOctaves);
+  const notes = state.scaleIsArpeggio && state.scaleType === 'ALL'
+    ? generateAllArpeggioNotes(state.scaleOctaves)
+    : generateScaleNotes(state.scaleKey, state.scaleType, state.scaleIsArpeggio, state.scaleOctaves);
 
   // Append final root note when not looping so the exercise resolves on Do;
   // omit it when looping so the root isn't played twice at the loop boundary.
@@ -1223,7 +1354,6 @@ function updateScaleNotes() {
   state.activeNotes = notes;
   state.currentNoteIndex = 0;
   state.currentMeasure = 1;
-  state.inTuneSince = 0;
   renderScaleMusicXML(notes);
   updateTargetDisplay();
 }
@@ -1305,6 +1435,74 @@ function shiftCursorForCurrentSystem(cursorEl) {
   }
 }
 
+function findSystemIndexForSvgY(svgY) {
+  if (!_systemShiftMap?.length) return 0;
+  let nearest = 0;
+  let minDist = Math.abs(svgY - _systemShiftMap[0].center);
+  for (let i = 1; i < _systemShiftMap.length; i++) {
+    const d = Math.abs(svgY - _systemShiftMap[i].center);
+    if (d < minDist) { minDist = d; nearest = i; }
+  }
+  return nearest;
+}
+
+function drawSegmentLabelsInSvg() {
+  const svg = els.scoreContainer.querySelector('svg');
+  if (!svg) return;
+  svg.querySelectorAll('.arp-segment-label').forEach(el => el.remove());
+  if (!state.scaleIsArpeggio || state.scaleType !== 'ALL') return;
+  if (!state.scoreManager.osmd?.graphic?.MeasureList) return;
+
+  const notes = state.activeNotes;
+  const nPerMeasure = getNotesPerMeasure();
+  const measureList = state.scoreManager.osmd.graphic.MeasureList;
+
+  notes.forEach((note, noteIdx) => {
+    if (!note.segmentLabel) return;
+    const measureIdx = Math.floor(noteIdx / nPerMeasure);
+    const gMeasure = measureList[measureIdx]?.[0];
+    if (!gMeasure?.PositionAndShape) return;
+
+    const abs = gMeasure.PositionAndShape.AbsolutePosition;
+    const svgX = abs.x * OSMD_SCALE;
+    const svgY = abs.y * OSMD_SCALE;
+
+    // Place label in the vertical centre of the gap between adjacent systems
+    // so it never overlaps with notes or ledger lines on either system.
+    let labelY;
+    const sysIdx = findSystemIndexForSvgY(svgY);
+    const sys     = _systemShiftMap?.[sysIdx];
+    const prevSys = _systemShiftMap?.[sysIdx - 1];
+
+    if (prevSys) {
+      const prevBottom = prevSys.bottom + prevSys.shift;
+      const thisTop    = sys.top + sys.shift;
+      labelY = (prevBottom + thisTop) / 2;
+    } else {
+      // First system: mirror the same half-gap spacing used by other labels,
+      // derived from the gap between system 0 and system 1 (if available).
+      const nextSys = _systemShiftMap?.[1];
+      const halfGap = (sys && nextSys)
+        ? ((nextSys.top + nextSys.shift) - (sys.bottom + sys.shift)) / 2
+        : 8;
+      labelY = sys ? sys.top + sys.shift - halfGap : svgY - 8;
+    }
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.classList.add('arp-segment-label');
+    text.setAttribute('x', svgX);
+    text.setAttribute('y', labelY);
+    text.setAttribute('dominant-baseline', 'middle');
+    text.setAttribute('font-size', '11');
+    text.setAttribute('font-weight', 'bold');
+    text.setAttribute('fill', '#1a1a2e');
+    text.setAttribute('font-family', '-apple-system, BlinkMacSystemFont, Helvetica, sans-serif');
+    text.style.pointerEvents = 'none';
+    text.textContent = note.segmentLabel;
+    svg.appendChild(text);
+  });
+}
+
 function applyScalePostProcessing(keepHidden = false) {
   if (_postProcessingPending) clearTimeout(_postProcessingPending);
   if (keepHidden) els.scoreContainer.style.visibility = 'hidden';
@@ -1312,9 +1510,11 @@ function applyScalePostProcessing(keepHidden = false) {
     _postProcessingPending = null;
     hideCourtesyClefsAtLineEnds();
     equalizeSystemSpacing();
+    drawSegmentLabelsInSvg();  // after shifts are known, before crop
     cropSvgToContent();
     _postProcessApplied = true;
     els.scoreContainer.style.visibility = '';
+    requestAnimationFrame(() => requestAnimationFrame(() => updateScaleHighlight()));
   }, 80);
 }
 
@@ -1418,11 +1618,9 @@ function cropSvgToContent() {
     const topCropSvg = Math.max(0, box.y - vb.y - 2);
     const topCropPx = Math.floor(topCropSvg * scaleY);
 
-    const contentBottomPx = (box.y - vb.y + box.height + pad) * scaleY + 120;
-
-    // Shift the container (SVG + cursor both move together, keeping alignment).
-    // The wrapper's overflow:hidden clips the shifted-up empty region.
-    els.scoreContainer.style.height = `${contentBottomPx}px`;
+    // Shift the container up to hide the blank space OSMD adds above the score.
+    // The wrapper (overflow-y:auto) handles scrolling; no height override needed.
+    els.scoreContainer.style.height = '';
     els.scoreContainer.style.marginTop = `-${topCropPx}px`;
 
   } catch (e) {
@@ -1519,6 +1717,8 @@ function equalizeSystemSpacing() {
     _systemShiftMap = staves.map((s, i) => ({
       center: staffCenters[i],
       shift: systemShifts[i],
+      top: s.minY,
+      bottom: s.maxY,
     }));
   } catch (e) {
     console.warn('equalizeSystemSpacing failed:', e);
@@ -1597,26 +1797,12 @@ async function renderScaleMusicXML(notes) {
     setupScalePostProcessingObserver();
 
     // Force OSMD to fully position the cursor at the first note.
-    // We need to: advance forward then reset, which triggers OSMD's full
-    // position calculation. Then wait for layout/paint to settle.
-    setTimeout(() => {
-      try {
-        const cursor = state.scoreManager.osmd.cursor;
-        cursor.next();
-        cursor.reset();
-        state.scoreManager._cursorBeat = 0;
-      } catch (e) {}
-      // Use double rAF to ensure layout has fully settled before measuring
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const note = state.activeNotes[state.currentNoteIndex];
-          if (note && state.scoreManager.osmd) {
-            const cursorEl = state.scoreManager.osmd.cursor.cursorElement;
-            showNoteNameOverlay(note, cursorEl, state.currentNoteIndex);
-          }
-        });
-      });
-    }, 50);
+    try {
+      const cursor = state.scoreManager.osmd.cursor;
+      cursor.next();
+      cursor.reset();
+      state.scoreManager._cursorBeat = 0;
+    } catch (e) {}
   } catch (err) {
     console.error('Failed to render scale MusicXML:', err);
   }
@@ -1640,7 +1826,6 @@ function updateScaleSubModeUI() {
 function showScaleComplete() {
   setTimeout(() => {
     state.currentNoteIndex = 0;
-    state.inTuneSince = 0;
     updateScaleHighlight();
     updateTargetDisplay();
   }, 2000);
@@ -1751,9 +1936,13 @@ function showBpmInput(scrub, val) {
 // Event listeners
 function init() {
   initDOM();
-  setBpm(120);
+  setBpm(state.bpm);
 
-  window.addEventListener('scroll', () => {
+  // Size canvas on first paint and on resize
+  window.addEventListener('resize', resizePitchCanvas);
+  requestAnimationFrame(resizePitchCanvas);
+
+  els.scoreWrapper.addEventListener('scroll', () => {
     const osmdCursor = state.scoreManager.osmd?.cursor;
     const cursorEl = osmdCursor?.cursorElement || osmdCursor?.GetCurrentSymbol?.()?.cursorElement;
     if (cursorEl && els.noteNameOverlay.style.display !== 'none') {
@@ -1767,9 +1956,15 @@ function init() {
 
   els.playBtn.addEventListener('click', togglePlayback);
 
+  // Sync button states from loaded prefs
+  els.loopBtn.classList.toggle('active', state.loopEnabled);
+  els.countInBtn.classList.toggle('active', state.countInEnabled);
+  els.noteNameBtn.classList.toggle('active', state.showNoteNames);
+
   function toggleLoop() {
     state.loopEnabled = !state.loopEnabled;
     els.loopBtn.classList.toggle('active', state.loopEnabled);
+    savePrefs();
     if (state.scorePlayer) state.scorePlayer.shouldLoop = state.loopEnabled;
     if (state.view === 'scales' && state.activeNotes.length) {
       if (state.isPlaying) stopPlayback();
@@ -1778,9 +1973,16 @@ function init() {
   }
   els.loopBtn.addEventListener('click', toggleLoop);
 
+  els.countInBtn.addEventListener('click', () => {
+    state.countInEnabled = !state.countInEnabled;
+    els.countInBtn.classList.toggle('active', state.countInEnabled);
+    savePrefs();
+  });
+
   function toggleNoteNames() {
     state.showNoteNames = !state.showNoteNames;
     els.noteNameBtn.classList.toggle('active', state.showNoteNames);
+    savePrefs();
     if (!state.showNoteNames) hideNoteNameOverlay();
     else updateScaleHighlight();
   }
@@ -1798,6 +2000,8 @@ function init() {
   function setOctaves(n) {
     state.scaleOctaves = n;
     octBtn.textContent = n === 1 ? '1 Octave' : `${n} Octaves`;
+    octBtn.classList.add('active');
+    savePrefs();
     if (state.isPlaying) stopPlayback();
     updateScaleNotes();
   }
@@ -1811,13 +2015,24 @@ function init() {
   updateTargetDisplay();
 
   // Panel tab switching
+  // Restore saved panel state
+  els.topPanel.dataset.state = state.topPanel;
+  document.querySelectorAll('.panel-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.panel === state.topPanel)
+  );
+
   document.querySelectorAll('.panel-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const panel = tab.dataset.panel;
       els.topPanel.dataset.state = panel;
+      state.topPanel = panel;
+      savePrefs();
       document.querySelectorAll('.panel-tab').forEach(t =>
         t.classList.toggle('active', t.dataset.panel === panel)
       );
+      if (panel === 'intonation') requestAnimationFrame(resizePitchCanvas);
+      requestAnimationFrame(() => requestAnimationFrame(() => updateScaleHighlight()));
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
     });
   });
 
